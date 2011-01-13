@@ -1,0 +1,10 @@
+name = Harvest Notifications
+description = "Provides various harvest project notifications."
+version = 7.x-1.0
+core = 7.x
+package = Harvest
+dependencies[] = harvest
+dependencies[] = harvest_projects
+dependencies[] = token
+files[] = harvest_notifications.admin.inc
+files[] = harvest_notifications.module

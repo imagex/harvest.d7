@@ -1,0 +1,207 @@
+<?php
+/**
+ * @file
+ * Provides a link between Drupal and the harvest API.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function harvest_menu() {
+  $items['admin/harvest'] = array(
+    'title' => 'Harvest configuration',
+    'description' => 'Administer harvest specific settings.',
+    'page callback' => 'system_admin_menu_block_page',
+    'position' => 'left',
+    'weight' => -5,
+    'access arguments' => array('administer site configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+  $items['admin/harvest/api'] = array(
+    'title' => 'API settings',
+    'description' => 'Configure harvest account settings and cache life.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'harvest.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Executes a request to the harvest API and checks for a returned result.
+ *
+ * @param $type
+ *   Type of request that will be made to the harvest API. See the harvest API documentation for the
+ *   available types, http://www.getharvest.com/api/.
+ *
+ * @param $params
+ *   An array of paramaters that will be added to the request URL.
+ *
+ * @param $options
+ *   An array of options that will alter the request process.
+ *
+ * @param $reset
+ *   Whether to reset the database request cache.
+ *
+ * @return
+ *   An array of the results returned from harvest, if request succeeded.
+ */
+function harvest_request($type, $options = array(), $reset = FALSE) {
+  global $_harvest_request_total, $_harvest_execution_time;
+
+  $type = trim($type, '/');
+
+  // Only return the cache when reset is false.
+  if (!$reset) {
+    $cache = cache_get($type, 'cache_harvest');
+    if (!empty($cache) && (REQUEST_TIME - $cache->created) <= variable_get('harvest_cache_life', '3600')) {
+      return $cache->data;
+    }
+  }
+
+  // Determine how long it has been since the first request.
+  if (!$_harvest_request_total && !$_harvest_execution_time) {
+    $_harvest_execution_time = REQUEST_TIME;
+  }
+  $seconds_since = REQUEST_TIME - $_harvest_execution_time;
+
+  // In order to prevent the API from timing us out we must implement a smart throttle that
+  // doesn't break the page but gets the job done. The API allows us to make up to 30 calls within
+  // a 15 second time period. If we get close to that, we will use a simple stall, it will make
+  // the page load slower but in the end prevents it from breaking completely.
+  if ($_harvest_request_total == 30 && $seconds_since > 10) {
+    sleep(15);
+  }
+
+  // Build the request headers which will be sent along to the harvest API.
+  $headers = array(
+    'Accept' => 'application/xml',
+    'Content-Type' => 'application/xml',
+    'Authorization' => 'Basic ' . (!empty($options['login']) ? $options['login'] : variable_get('harvest_login', ''))
+  );
+
+  // Execute the request, check the response code (200 is successfull).
+  $return = drupal_http_request((!empty($options['url']) ? $options['url'] : variable_get('harvest_url', '')) . '/' . $type, array('headers' => $headers));
+  $_harvest_request_total++;
+  if (empty($return->code)) {
+    return FALSE;
+  }
+  if (isset($options['return']) && $options['return'] == 'code') {
+    return $return->code;
+  }
+  if ($return->code != '200') {
+    return FALSE;
+  }
+
+  // Parse the result so that it is more usable in a PHP program, than add it to cache.
+  require_once(drupal_get_path('module', 'harvest') . '/harvest.parser.inc');
+  $data = harvest_xmlparse($return->data);
+  if (!is_array($data)) {
+    return FALSE;
+  }
+  if (isset($options['type modifier'])) {
+    $type = $options['type modifier'];
+  }
+  harvest_request_cleanup($type, $data, isset($options['keys']) ? $options['keys'] : NULL);
+  cache_set($type, $data, 'cache_harvest');
+
+  return $data;
+}
+
+/**
+ * Cleans up the output of a request, if necessary.
+ *
+ * @param $type
+ *   Type of request that returned the data.
+ *
+ * @param &$data
+ *   Data of the parsed request.
+ */
+function harvest_request_cleanup($type, &$data, $keys = array()) {
+  // Blow up the type into it's sections, replacing numeric pieces with %.
+  $type_pieces = explode('?', $type);
+  $type_pieces = explode('/', $type_pieces[0]);
+  foreach ($type_pieces as $key => $value) {
+    if (is_numeric($value)) {
+      $type_pieces[$key] = '%';
+    }
+  }
+  $type = implode('/', $type_pieces);
+
+  // Changes to specific types of requests.
+  switch ($type) {
+    case 'clients':
+      $data = $data['clients']['client'];
+      $data = harvest_request_key_change($data);
+      break;
+    case 'projects':
+      $data = $data['projects']['project'];
+      $data = harvest_request_key_change($data, 'client-id', 'id');
+      break;
+    case 'projects_by_id':
+      $data = $data['projects']['project'];
+      $data = harvest_request_key_change($data, 'id');
+      break;
+    case 'tasks':
+      $data = $data['tasks']['task'];
+      $data = harvest_request_key_change($data);
+      break;
+    case 'projects/%/task_assignments':
+      $data = $data['task-assignments']['task-assignment'];
+      $data = harvest_request_key_change($data, 'task-id');
+      break;
+    case 'projects/%/entries':
+      $data = $data['day-entries']['day-entry'];
+      $data = harvest_request_key_change($data, 'task-id', 'id');
+      break;
+    case 'people':
+      $data = $data['users']['user'];
+      $data = harvest_request_key_change($data, 'id');
+      break;
+    case 'people/%/entries':
+      $data = $data['day-entries']['day-entry'];
+      if (count($data) && !$data[0]) {
+        $data = array(0 => $data);
+      }
+      $data = harvest_request_key_change($data, 'project-id', 'id');
+      break;
+  }
+}
+
+/**
+ * Re-assigns key values based on a value from the parsed results.
+ *
+ * @param $data
+ *   Data of the parsed request.
+ *
+ * @param $target1
+ *   Name of primary target to re-assign keys by.
+ *
+ * @param $target2
+ *   Name of a secondary target to re-assign keys by.
+ *
+ * @return
+ *   A new array with the proper keys defined.
+ */
+function harvest_request_key_change($data, $target1 = 'id', $target2 = NULL) {
+  $revised_data = array();
+
+  if (is_array($data)) {
+    foreach ($data as $key => $values) {
+      if (!empty($values[$target1])) {
+        if (!empty($target2)) {
+          if (!empty($values[$target2])) {
+            $revised_data[$values[$target1]][$values[$target2]] = $values;
+          }
+        }
+        else {
+          $revised_data[$values[$target1]] = $values;
+        }
+      }
+    }
+  }
+
+  return $revised_data;
+}

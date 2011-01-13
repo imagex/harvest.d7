@@ -1,0 +1,439 @@
+<?php
+/**
+ * @file
+ * Provides various harvest project notifications.
+ */
+
+/**
+ * Implements hook_cron().
+ */
+function harvest_notifications_cron() {
+  harvest_notifications_daily();
+  harvest_notifications_weekly();
+  harvest_notifications_report();
+}
+
+/**
+ * Implements hook_theme().
+ */
+function harvest_notifications_theme() {
+  return array(
+    'harvest_notifications_timezones_form' => array(
+      'render element' => 'form',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function harvest_notifications_menu() {
+  $items = array();
+
+  $items['admin/harvest/notifications'] = array(
+    'title' => 'Notifications',
+    'description' => 'Configure notification settings and templates.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_notifications_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'harvest_notifications.admin.inc',
+  );
+
+  $items['admin/harvest/notifications/general'] = array(
+    'title' => 'General settings',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['admin/harvest/notifications/timezones'] = array(
+    'title' => 'Timezone settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_notifications_timezones_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'harvest_notifications.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function harvest_notifications_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'project_node_form' && $form['#id'] == 'node-form') {
+    // Add ability to turn weekly reports on/off for individual projects.
+    if (harvest_notifications_variable('harvest_notifications_weekly')) {
+      $form['weekly_notifications'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Enable weekly notifications for this project?'),
+        '#description' => t('Check this box if weekly notifications should be sent for this project.'),
+        '#default_value' => variable_get("harvest_project_{$form['nid']['#value']}_weekly_notification", 0),
+        '#weight' => -3,
+      );
+      $form['#submit'][] = 'harvest_notifications_projects_submit';
+    }
+  }
+}
+
+/**
+ * Saves additional project information upon submission.
+ */
+function harvest_notifications_projects_submit(&$form, &$form_state) {
+  variable_set("harvest_project_{$form_state['values']['nid']}_weekly_notification", $form_state['values']['weekly_notifications']);
+}
+
+/**
+ * Provides default settings for various variables.
+ *
+ * @param $name
+ *   Name of the variable to lookup.
+ *
+ * @return
+ *   String containing the saved variable or the default value.
+ */
+function harvest_notifications_variable($name) {
+  $value = variable_get($name, -1);
+
+  // Default values for notification variables.
+  if ($value == -1) {
+    switch ($name) {
+      // Daily notification defaults
+      case 'harvest_notifications_daily':
+        return 0;
+      case 'harvest_notifications_daily_lastsend':
+        return array();
+      case 'harvest_notifications_daily_subject':
+        return t("Daily overview from [site-name]");
+      case 'harvest_notifications_daily_body':
+        return t("Hi [notification-user-name],\n\nHere is your daily overview for [notification-date]:\n\n[notification-overview]\n\n---\n[site-name]");
+      case 'harvest_notifications_daily_from':
+        return NULL;
+
+      // Weekly notifications defaults
+      case 'harvest_notifications_weekly':
+        return 0;
+      case 'harvest_notifications_weekly_sendon':
+        return 'Monday';
+      case 'harvest_notifications_weekly_lastsend':
+        return 0;
+      case 'harvest_notifications_weekly_subject':
+        return t("Weekly overview from [site-name]");
+      case 'harvest_notifications_weekly_body':
+        return t("Hi [notification-user-name],\n\nHere is your weekly overview for [notification-project]:\n\n[notification-overview]\n\n---\n[site-name]");
+      case 'harvest_notifications_weekly_from':
+        return NULL;
+
+      // Report notification defaults
+      case 'harvest_notifications_report':
+        return 0;
+      case 'harvest_notifications_report_roles':
+        return array();
+      case 'harvest_notifications_report_interval':
+        return 1;
+      case 'harvest_notifications_report_startdate':
+        return date('m') . '-' . date('d') . '-' . date('Y');
+      case 'harvest_notifications_report_sendon':
+        return 'Monday';
+      case 'harvest_notifications_report_lastsend':
+        return 0;
+      case 'harvest_notifications_report_subject':
+        return t("Harvest report from [site-name]");
+      case 'harvest_notifications_report_body':
+        return t("Hi [notification-user-name],\n\nHere is your harvest report for the last [notification-interval]:\n[notification-link]\n\n---\n[site-name]");
+      case 'harvest_notifications_report_from':
+        return NULL;
+    }
+  }
+
+  // If content access is not enabled, than weekly reports are disabled.
+  if ($name == 'harvest_notifications_weekly' && !module_exists('content_access')) {
+    return 0;
+  }
+
+  return $value;
+}
+
+/**
+ * Implements hook_token_list().
+ */
+function harvest_notifications_token_list($type = 'all') {
+  if ($type == 'harvest_notifications' || $type == 'all') {
+    $tokens['harvest_notifications']['notification-user-name'] = t("The user's name who is recieving the notification.");
+    $tokens['harvest_notifications']['notification-date'] = t("The date of the notification, not necessarily the same as today.");
+    $tokens['harvest_notifications']['notification-project'] = t("Name of notification project, if applicable.");
+    $tokens['harvest_notifications']['notification-overview'] = t("Overview of the notification text.");
+    $tokens['harvest_notifications']['notification-link'] = t("Supporting link for the notification.");
+    $tokens['harvest_notifications']['notification-interval'] = t("Interval that the notification is sent at.");
+    return $tokens;
+  }
+}
+
+/**
+ * Implements hook_token_values().
+ */
+function harvest_notifications_token_values($type, $object = NULL, $options = array()) {
+  if ($type == 'harvest_notifications') {
+    $tokens['notification-user-name'] = $object['account']->name ? $object['account']->name : $object['person']['first-name'] . ' ' . $object['person']['last-name'];
+    $tokens['notification-date'] = date('l, F jS, Y', $object['date']);
+    $tokens['notification-project'] = $object['project'];
+    $tokens['notification-overview'] = $object['overview'];
+    $tokens['notification-link'] = $object['link'];
+    $tokens['notification-interval'] = $object['interval'];
+    return $tokens;
+  }
+}
+
+/**
+ * Puts together the peices of a notification and sends it on it's way.
+ *
+ * @param $type
+ *   The type of notification sending (ex: report).
+ *
+ * @param $data
+ *   An array containing additional data to pass to the token system.
+ */
+function harvest_notifications_send($type, $data) {
+  global $user;
+  $params = array('data' => $data);
+  if (variable_get('harvest_notifications_debug', 0) && ($site_mail = variable_get('site_mail', ''))) {
+    $to = $site_mail;
+  }
+  else {
+    $to = $data['account']->mail ? $data['account']->mail : $data['person']['email'];
+  }
+  $from = harvest_notifications_variable('harvest_notifications_report_from');
+  $language = user_preferred_language($data['account'] ? $data['account'] : $user);
+  drupal_mail('harvest_notifications', $type, $to, $language, $params, $from);
+}
+
+/**
+ * Implements hook_mail().
+ */
+function harvest_notifications_mail($key, &$message, $params) {
+  $message['headers']['Content-Type'] = 'text/html; charset=UTF-8; format=flowed';
+  $message['subject'] = harvest_notifications_variable("harvest_notifications_{$key}_subject");
+  $message['subject'] = token_replace($message['subject'], array('harvest_notifications' => $params['data']));
+  $message['body'][0] = nl2br(harvest_notifications_variable("harvest_notifications_{$key}_body"));
+  $message['body'][0] = token_replace($message['body'][0], array('harvest_notifications' => $params['data']));
+}
+
+/**
+ * Checks if the current user is within the roles specified.
+ *
+ * @param $roles
+ *   An array including the role ID's in which to return users for.
+ *
+ * @return
+ *   An array containing a list of user objects in the specified roles.
+ */
+function harvest_notifications_userlist($roles) {
+  $query = db_select('users', 'u');
+  $ur_alias = $query->join('user_roles', 'r', 'u.uid = r.uid');
+  $query
+    ->fields('n')
+    ->condition("{$ur_alias}.rid", implode(',', $roles), 'in');
+  $result = $query->execute;
+//  $result = db_query("SELECT u.* FROM {users} u INNER JOIN {users_roles} r ON r.uid = u.uid WHERE r.rid IN (%s)", );
+
+  $accounts = array();
+  foreach ($result as $account) {
+    $account->data = unserialize($account->data);
+    $account->harvest_account = $account->data['harvest_projects']['harvest_account'];
+    unset($account->data);
+    $accounts[$account->uid] = $account;
+  }
+
+  return $accounts;
+}
+
+/**
+ * Finds the local time for a person.
+ */
+function harvest_notifications_local_time($timezone) {
+  // Handles the default timezone option.
+  if ($timezone == 'Default') {
+    $timezone = variable_get('harvest_notifications_default_timezone', FALSE);
+    if (!$timezone) {
+      return gmmktime();
+    }
+  }
+
+  // Calculate the persons local time (includes daylight savings).
+  if (!empty($timezone)) {
+    $dateTimeZone = new DateTimeZone($timezone);
+    $dateTime = new DateTime('now', $dateTimeZone);
+    $offset = timezone_offset_get($dateTimeZone, $dateTime);
+  }
+
+  return gmmktime() + $offset;
+}
+
+/**
+ * Processes and sends a daily overview to users.
+ */
+function harvest_notifications_daily() {
+  if (harvest_notifications_variable('harvest_notifications_daily')) {
+    $lastsend = harvest_notifications_variable('harvest_notifications_daily_lastsend');
+    $timezones = variable_get('harvest_notifications_timezones', array());
+
+    // If lastsend is not an array, reset it.
+    if (!is_array($lastsend)) {
+      $lastsend = array();
+    }
+
+    // Load up the people, projects, and tasks.
+    $people = harvest_request('people');
+    $projects = harvest_request('projects', array('type modifier' => 'projects_by_id'));
+    $tasks = harvest_request('tasks');
+
+    // Run through each person and check when the last daily overview was sent.
+    $todays_date = format_date(REQUEST_TIME, 'custom', 'mdY');
+    if (is_array($people) && count($people)) {
+      foreach ($people as $person) {
+        $person_id = $person['id'];
+
+        // Determine local time for this person.
+        $local_time = harvest_notifications_local_time($timezones[$person_id]);
+
+        // Continue only if the timestamp generated is for a previous day.
+        $timestamp = strtotime('-1 day', $local_time);
+        if (!$lastsend[$person_id] || gmdate('mdY', $timestamp) != gmdate('mdY', $lastsend[$person_id])) {
+
+          // Only attempt to send a daily report for day other than today.
+          if (gmdate('mdY', $timestamp) != gmdate('mdY', $local_time)) {
+            if (valid_email_address($person['email'])) {
+              $entries = harvest_request("people/$person_id/entries?from=" . gmdate('Ymd', $timestamp) . "&to=" . gmdate('Ymd', $timestamp), array(), TRUE);
+              if (is_array($entries) && count($entries)) {
+                $daily_overview = '';
+                $total_day_hours = 0;
+
+                foreach ($entries as $project_id => $project_entries) {
+                  $daily_overview .= $projects[$project_id]['name'] . "\n\n";
+                  $total_project_hours = 0;
+                  foreach ($project_entries as $entry) {
+                    $total_project_hours += (float) $entry['hours'];
+                    $total_day_hours += (float) $entry['hours'];
+                    $daily_overview .= "* " . number_format($entry['hours'], 2) . " ({$tasks[$entry['task-id']]['name']}) {$entry['notes']}\n";
+                  }
+                  $daily_overview .= "* " . number_format($total_project_hours, 2) . " (Total Project Hours)\n\n";
+                }
+                $daily_overview .= "Total Hours: " . number_format($total_day_hours, 2);
+
+                $lastsend[$person_id] = $timestamp;
+                harvest_notifications_send('daily', array('person' => $person, 'overview' => nl2br($daily_overview), 'date' => $timestamp));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Update the last send timestamps for each person.
+    variable_set('harvest_notifications_daily_lastsend', $lastsend);
+  }
+}
+
+/**
+ * Processes and sends weekly notifications to users.
+ */
+function harvest_notifications_weekly() {
+  if (harvest_notifications_variable('harvest_notifications_weekly') && module_exists('content_access')) {
+    $lastsend = harvest_notifications_variable('harvest_notifications_weekly_lastsend');
+    $sendon = harvest_notifications_variable('harvest_notifications_weekly_sendon');
+
+    // In the first expression we check if a weekly notification has ever been sent, if not than we check
+    // if it is the send on day. In the second expression we check if it's been at least one week
+    // since the last time a weekly notification was sent.
+    $last_sending_day = $sendon == date('l') ? mktime(0, 0, 0, date('n'), date('j'), date('Y')) : strtotime("last $sendon");
+    if (($lastsend === 0 && $sendon == date('l')) || ($lastsend > 0 && $last_sending_day > $lastsend && $sendon == date('l'))) {
+      $sendon_timestamp = date('l') == $sendon ? mktime(0, 0, 0, date('n'), date('j'), date('Y')) : strtotime("last $sendon");
+
+      //$internal_projects = db_query("SELECT nid FROM {node} WHERE status = 1 AND type = 'project'");
+      $query = db_select('node', 'n');
+      $query
+        ->condition('status', 1)
+        ->condition('type', 'project')
+        ->field('n', array('nid'));
+      $internal_projects = $query->execute();
+
+      foreach ($internal_projects as $node) {
+        if (variable_get("harvest_project_{$node->nid}_weekly_notification", 0)) {
+          $node = node_load($node->nid);
+          $overview = theme('harvest_projects_timesheet', $node, TRUE);
+          $link = url("node/$node->nid", array('absolute' => TRUE));
+
+          // Create a list of accounts that the weekly report is sent too.
+          $accounts = array();
+          $accounts[] = user_load($node->uid);
+          //$results = db_query("SELECT u.* FROM {acl_user} au INNER JOIN {acl_node} an ON an.acl_id = au.acl_id INNER JOIN {users} u ON u.uid = au.uid WHERE an.grant_view = 1 AND an.nid = %d", $node->nid);
+          $query = db_select('acl_user', 'au');
+          $an_alias = $query->innerJoin('acl_node', 'an', 'au.acl_id = an.acl_id');
+          $u_alias = $query->innerJoin('users', 'u', 'au.uid = u.uid');
+          $query->fields('u')
+            ->condition("{$an_alias}.grant_view", 1)
+            ->condition("{$an_alias}.nid", $node->nid);
+          $results = $query->execute();
+
+          foreach ($result as $data) {
+            $accounts[] = $data;
+          }
+
+          // Run through the accounts and send the notification.
+          foreach ($accounts as $account) {
+            harvest_notifications_send('weekly', array('account' => $account, 'overview' => $overview, 'project' => $node->title, 'link' => $link));
+          }
+
+          variable_set('harvest_notifications_weekly_lastsend', $sendon_timestamp);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Processes and sends report notifications to users.
+ */
+function harvest_notifications_report() {
+  if (harvest_notifications_variable('harvest_notifications_report')) {
+    $lastsend = harvest_notifications_variable('harvest_notifications_report_lastsend');
+    $ellapsed = REQUEST_TIME - $lastsend;
+    $interval_weeks = harvest_notifications_variable('harvest_notifications_report_interval');
+    $interval_seconds = ($interval_weeks * 604800) - 1; // Subtract 1 to keep it from going to the next day.
+    $startdate = harvest_notifications_variable('harvest_notifications_report_startdate');
+    $sendon = harvest_notifications_variable('harvest_notifications_report_sendon');
+
+    // Build a unix timestamp for the date to start sending on.
+    $startdate = explode('-', $startdate);
+    if (checkdate($startdate[0], $startdate[1], $startdate[2])) {
+      $startdate = mktime(0, 0, 0, $startdate[0], $startdate[1], $startdate[2]);
+    }
+    else {
+      $startdate = REQUEST_TIME + 1000;
+    }
+
+    // In the first expression we check if a report notification has ever been sent, if not than we check
+    // if it is the send on day. In the second expression it finds that a report notification has been sent
+    // before, it continues to check if the total ellapsed time is greater than or equal to the total
+    // numbers of seconds between each weekly interval.
+    if (($lastsend === 0 && $sendon == date('l') && (REQUEST_TIME - $startdate) >= 0) || ($lastsend > 0 && $ellapsed >= $interval_seconds)) {
+      $accounts = harvest_notifications_userlist(harvest_notifications_variable('harvest_notifications_report_roles'));
+
+      $sendon_timestamp = date('l') == $sendon ? mktime(0, 0, 0, date('n'), date('j'), date('Y')) : strtotime("last $sendon");
+      $report_startdate = $sendon_timestamp - ($interval_seconds + 1);
+      $report_enddate = strtotime('-1 day', $sendon_timestamp);
+
+      foreach ($accounts as $account) {
+        if (is_numeric($account->harvest_account)) {
+          $report_link  = trim(variable_get('harvest_url', ''), '/') . "/reports/total_hours_person";
+          $report_link .= "?start_date=" . date('m/d/Y', $report_startdate);
+          $report_link .= "&end_date=" . date('m/d/Y', $report_enddate);
+          $report_link .= "&person_id={$account->harvest_account}";
+          harvest_notifications_send('report', array('account' => $account, 'interval' => format_plural($interval_weeks, 'week', '@count weeks'), 'link' => $report_link));
+        }
+      }
+
+      variable_set('harvest_notifications_report_lastsend', $sendon_timestamp);
+    }
+  }
+}

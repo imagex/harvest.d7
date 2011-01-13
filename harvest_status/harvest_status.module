@@ -1,0 +1,147 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Gives a snapshot of what everyone is working on.
+ */
+
+/**
+ * Implements hook_init()
+ */
+function harvest_status_init() {
+  drupal_add_css(drupal_get_path('module', 'harvest_status') . '/harvest_status.css');
+}
+
+/**
+ * Implements hook_menu()
+ */
+function harvest_status_menu() {
+  // administration page
+  $items['admin/harvest/status'] = array(
+    'title' => 'Harvest Status settings',
+    'description' => 'Select users to be included in the Harvest Status block',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_status_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * Settings form
+ */
+function harvest_status_admin() {
+  $form = array();
+
+  $form['harvest_status_users'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Users to include'),
+    '#default_value' => variable_get('harvest_status_users', array()),
+    '#options' => _harvest_status_user_list(),
+    '#description' => t("Select all user you would like included in the Harvest Status block."),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+function _harvest_status_user_list() {
+  $sql = "SELECT uid, name FROM {users} WHERE uid != 0 ORDER BY name ASC";
+  $result = db_query($sql);
+  $items = array();
+  while ($row = db_fetch_array($result)) {
+    $items[$row['uid']] = $row['name'];
+  }
+  return $items;
+}
+
+/**
+ * Implements hook_user()
+ */
+function harvest_status_user($op, &$edit, &$account, $category = NULL) {
+  // add option to user form to set password for harvest account
+	if ($op == 'form') {
+		if (user_access('assign harvest account to user')) {
+			$form['harvest']['harvest_account_login'] = array(
+			'#type' => 'password',
+			'#title' => t('Password'),
+			'#description' => t('Enter the password for your harvest account.'),
+			);
+			return $form;
+		}
+	}
+	if ($op == 'submit') {
+	  if ($edit['harvest_account'] && $edit['harvest_account_login']) {
+	    // we don't store the password, but the encrypted harvest login string
+	    $harvest_account = harvest_request('people/' . $edit['harvest_account']);
+	    $edit['harvest_account_login'] = base64_encode(trim($harvest_account['user']['email']) .':'. trim($edit['harvest_account_login']));
+	  } else {
+      // leave the same if blank
+	    $edit['harvest_account_login'] = $account->harvest_account_login;
+	  }
+	}
+}
+
+/**
+ * Implements hook_block()
+ */
+function harvest_status_block($op='list', $delta=0, $edit=array()) {
+  switch ($op) {
+    case 'list':
+      $blocks[0]['info'] = t('Harvest status');
+      return $blocks;
+    case 'view':
+      $blocks['subject'] = t('Time tracking');
+      $blocks['content'] = harvest_status_contents();
+      return $blocks;
+  }
+}
+
+/**
+ * Fetch info from the API and format
+ */
+function harvest_status_contents() {
+  $output = '';
+  foreach(variable_get('harvest_status_users', array('0')) as $uid) {
+    if ($uid) {
+      $user = user_load(array('uid' => $uid));
+      if ($user->harvest_account_login) {
+        $items = array();
+        $harvest_result = harvest_request('daily', array('login' => $user->harvest_account_login), true);
+        if (is_array($harvest_result['daily']['day_entries']['day_entry'][0])) {
+          foreach ($harvest_result['daily']['day_entries']['day_entry'] as $day_entry) {
+            if ($day_entry['timer_started_at']) { // if this is an active timer, put it on top
+              array_unshift($items, theme_harvest_status_format_day_entry($day_entry));
+            } else {
+              $items[] = theme_harvest_status_format_day_entry($day_entry);
+            }
+          }
+        // array is structured differently if there's only one entry
+        } elseif (is_array($harvest_result['daily']['day_entries']['day_entry'])) {
+            $items[] = theme_harvest_status_format_day_entry($harvest_result['daily']['day_entries']['day_entry']);
+        } else {
+          $items[] = t('Inactive');
+        }
+      $output .= theme_item_list($items, $user->name, 'ul', array('class' => array('harvest-status-user')));
+      }
+    }
+  }
+  return $output;
+}
+
+/**
+ * Themable day entries from Harvest API
+ */
+function theme_harvest_status_format_day_entry($day_entry) {
+  $output = '<span class="harvest-hours' . ($day_entry['timer_started_at'] ? ' active' : '') . '">' . gmdate("H:i", $day_entry['hours'] * (60*60)) . '</span> ';
+  $output .= $day_entry['task'];
+  if ($day_entry['notes']) {
+    $output .= '<div class="harvest-notes">' . $day_entry['notes'] . '</div>';
+  }
+  $output .= '<div class="harvest-project">' . $day_entry['client'] . ' - ';
+  $output .= $day_entry['project'] . '</div> ';
+  return $output;
+}

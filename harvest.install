@@ -1,0 +1,30 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Install, update and uninstall functions for the harvest module.
+ */
+/**
+ * Implements hook_install().
+ */
+function harvest_install() {
+  drupal_install_schema('harvest');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function harvest_uninstall() {
+  variable_del('harvest_cache_life');
+  variable_del('harvest_url');
+  variable_del('harvest_email');
+  variable_del('harvest_login');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function harvest_schema() {
+  $schema['cache_harvest'] = drupal_get_schema_unprocessed('system', 'cache');
+  return $schema;
+}

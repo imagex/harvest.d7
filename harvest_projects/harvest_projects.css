@@ -1,0 +1,21 @@
+/**
+ * Jump to Project
+ */
+#harvest-projects-jump-form #edit-project-wrapper {
+	display: inline;
+}
+
+/**
+ * Project Timesheet
+ */
+tr.category-row,
+tr.date-row {
+	font-weight: bold;
+}
+
+/**
+ * Task Organizational Form
+ */
+form#harvest-projects-tasks-form table td.name-column {
+	width: 100%;
+}

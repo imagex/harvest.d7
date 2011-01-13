@@ -1,0 +1,1241 @@
+<?php
+/**
+ * @file
+ * Provides project pages that leverage the harvest API.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function harvest_projects_permission() {
+  return array(
+    'administer harvest projects' => array(
+      'title' => t('Administer Harvest Projects'),
+      'description' => t(''),
+    ),
+    'assign harvest account to user' => array(
+      'title' => t('Assign Harvest Account to User'),
+      'description' => t(''),
+    ),
+    'create harvest_project content' => array(
+      'title' => t('Create Harvest Project Content'),
+      'description' => t(''),
+    ),
+    'delete own harvest_project content' => array(
+      'title' => t('Delete Own Harvest Project Content'),
+      'description' => t(''),
+    ),
+    'delete any harvest_project content' => array(
+      'title' => t('Delete Any Harvest Project Content'),
+      'description' => t(''),
+    ),
+    'edit own harvest_project content' => array(
+      'title' => t('Edit Own Harvest Project Content'),
+      'description' => t(''),
+    ),
+    'edit any harvest_project content' => array(
+      'title' => t('Edit Any Harvest Project Content'),
+      'description' => t(''),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function harvest_projects_theme($existing, $type, $theme, $path) {
+  return array(
+    'harvest_projects_categories_form' => array(
+      'render element' => 'form',
+    ),
+    'harvest_projects_tasks_form' => array(
+      'render element' => 'form',
+    ),
+    'harvest_projects_timesheet' => array(
+      'variables' => array('node' => NULL),
+    ),
+    'harvest_projects_overview' => array(
+      'variables' => array('node' => NULL),
+    ),
+    'harvest_projects_task_entries' => array(
+      'variables' => array('node' => NULL, 'task_id' => NULL),
+    ),
+    'harvest_projects_email_safe' => array(
+      'variables' => array(),
+    ),
+  );
+}
+
+/**
+ * Implements hook_init().
+ */
+function harvest_projects_init() {
+  drupal_add_css(drupal_get_path('module', 'harvest_projects') . '/harvest_projects.css');
+}
+
+/**
+ * Implements hook_menu().
+ */
+function harvest_projects_menu() {
+  $items['admin/harvest/projects'] = array(
+    'title' => 'Project settings',
+    'description' => 'Configure harvest project settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_settings_form'),
+    'access arguments' => array('administer harvest projects'),
+    'file' => 'harvest_projects.admin.inc',
+  );
+  $items['admin/harvest/categories'] = array(
+    'title' => 'Task categories',
+    'description' => 'Manage organizational task categories.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_categories_form'),
+    'access arguments' => array('administer harvest projects'),
+    'file' => 'harvest_projects.admin.inc',
+  );
+  $items['admin/harvest/categories/list'] = array(
+    'title' => 'List',
+    'weight' => -1,
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/harvest/categories/add'] = array(
+    'title' => 'Add category',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_category_form'),
+    'access arguments' => array('administer harvest projects'),
+    'file' => 'harvest_projects.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/harvest/categories/edit/%'] = array(
+    'title' => 'Edit category',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_category_form', 4),
+    'access arguments' => array('administer harvest projects'),
+    'file' => 'harvest_projects.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/harvest/categories/delete/%'] = array(
+    'title' => 'Delete category',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_delete_category_form', 4),
+    'access arguments' => array('administer harvest projects'),
+    'file' => 'harvest_projects.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  $items['node/%node/tasks'] = array(
+    'title' => 'Tasks',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('harvest_projects_tasks_form', 1),
+    'access callback' => 'harvest_projects_tasks_node_access',
+    'weight' => 2,
+    'file' => 'harvest_projects.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['node/%node/entries/%'] = array(
+    'title' => 'Entries',
+    'page callback' => 'theme',
+    'page arguments' => array('harvest_projects_task_entries', 1, 3),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 1),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Access callback; checks who has access to project tasks.
+ */
+function harvest_projects_tasks_node_access() {
+  if (arg(0) == 'node' && is_numeric(arg(1))) {
+    $node = node_load(arg(1));
+    if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array()))) {
+      return user_access('administer harvest projects');
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function harvest_projects_form_alter(&$form, &$form_state, $form_id) {
+  // Get a list of nodes that are enabled for harvest_projects and make them into the form of XXX_node_form so we can match against it.
+  $enabled_node_types = variable_get('harvest_projects_content_types_to_attach_to', array('harvest_project'));
+  foreach ($enabled_node_types as $key => $val) {
+    if (!$val) {
+      unset($enabled_node_types[$key]);
+    }
+    else {
+      $enabled_node_types[$key] = $val . '_node_form';
+    }
+  }
+  
+  // Attach harvest_projects form fields if it is enabled for this.
+  if (in_array($form_id, $enabled_node_types)) {
+    $form['harvest_projects'] = array(
+      '#type' => 'fieldset',
+      '#group' => 'additional_settings',
+      '#title' => t('Harvest Projects settings'),
+    );
+    $form['harvest_projects']['harvest_project'] = array(
+      '#type' => 'select',
+      '#title' => t('Select harvest project'),
+      '#description' => t('Choose the harvest project which this drupal project will be linked to.'),
+      '#options' => array_merge(array('0' => t('<None>')), harvest_projects_list()),
+      '#required' => FALSE,
+      '#default_value' => isset($form['#node']->harvest_project) ? $form['#node']->harvest_project : '',
+      '#weight' => -4,
+    );
+  }
+  
+  switch ($form_id) {
+    case 'user_profile_form':
+      global $user;
+      $account = user_load($user->uid);
+
+      if (user_access('assign harvest account to user')) {
+        // Create list of people for select list.
+        $people_raw = harvest_request('people');
+        $people_list = array(0 => t('<none>'));
+        if (is_array($people_raw)) {
+          foreach ($people_raw as $person_id => $values) {
+            $people_list[$person_id] = $values['last-name'] . ', ' . $values['first-name'];
+          }
+        }
+
+        // Only make additions to form when API is responding.
+        if (count($people_list) > 1) {
+          $form['harvest_projects'] = array(
+            '#type' => 'fieldset',
+            '#title' => t('Harvest Projects settings'),
+            '#collapsible' => TRUE,
+            '#collapsed' => FALSE,
+            '#tree' => TRUE,
+          );
+          $form['harvest_projects']['harvest_account'] = array(
+            '#type' => 'select',
+            '#title' => t('Harvest account'),
+            '#description' => t('Select the harvest account which will be linked to this user.'),
+            '#options' => $people_list,
+            '#default_value' => isset($account->data['harvest_projects']['harvest_account']) ? $account->data['harvest_projects']['harvest_account'] : '',
+          );
+        }
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Implements hook_user_presave().
+ */
+function harvest_projects_user_presave(&$edit, $account, $category) {
+  // Make sure that our form value 'mymodule_foo' is stored as 'mymodule_bar'.
+  if (isset($edit['harvest_projects']['harvest_account'])) {
+    $edit['data']['harvest_projects']['harvest_account'] = $edit['harvest_projects']['harvest_account'];
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function harvest_projects_block_info() {
+  $blocks['jump_project'] = array('info' => t('Jump to project'));
+  $blocks['project_overview'] = array('info' => t('Project overview'));
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function harvest_projects_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'jump_project':
+      if (count(harvest_projects_options())) {
+        $block['subject'] = t('Jump to project');
+        $block['content'] = drupal_get_form('harvest_projects_jump_form');
+      }
+      break;
+    case 'project_overview':
+      if (arg(0) == 'node' && is_numeric(arg(1))) {
+        $node = node_load(arg(1));
+        if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array('harvest_project')))) {
+          $block['subject'] = t('Project overview');
+          $block['content'] = theme('harvest_projects_overview', $node);
+        }
+      }
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Form to jump between different projects.
+ */
+function harvest_projects_jump_form() {
+  $form['project'] = array(
+    '#type' => 'select',
+    '#options' => harvest_projects_options(),
+    '#required' => TRUE,
+    '#default_value' => (is_numeric(arg(1)) ? arg(1) : NULL),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Go'),
+  );
+  return $form;
+}
+
+/**
+ * Processes a request to jump to a project.
+ */
+function harvest_projects_jump_form_submit(&$form, &$form_state) {
+  $form['#redirect'] = "node/{$form_state['values']['project']}";
+}
+
+/**
+ * Implements hook_node_info().
+ */
+function harvest_projects_node_info() {
+  return array(
+    'harvest_project' => array(
+      'name' => t('Project'),
+      'base' => 'harvest_projects',
+      'description' => t('A <em>project</em> is a container of a harvest project that provides a summary of information.'),
+      'has_title' => TRUE,
+      'title_label' => t('Name'),
+      'has_body' => TRUE,
+      'body_label' => t('Description'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_access().
+ */
+function harvest_projects_node_access($node, $op, $account) {
+  if ($op == 'create') {
+    return user_access('create harvest_project content', $account);
+  }
+
+  if ($op == 'update') {
+    if (user_access('edit any harvest_project content', $account) || (user_access('edit own harvest_project content', $account) && ($account->uid == $node->uid))) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'delete') {
+    if (user_access('delete any harvest_project content', $account) || (user_access('delete own harvest_project content', $account) && ($account->uid == $node->uid))) {
+      return TRUE;
+    }
+  }
+}
+
+/**
+ * Retrieves a list of projects which the current user has access to.
+ */
+function harvest_projects_options() {
+  $options = array();
+  $enabled_node_types = variable_get('harvest_projects_content_types_to_attach_to', array('harvest_project'));
+
+  //$result = db_query("SELECT nid FROM {node} n WHERE status = :status AND type = :type ORDER BY title ASC", array(':status' => 1, ':type' => 'harvest_project'));
+  $query = db_select('node', 'n');
+  $query
+    ->condition('n.status', 1)
+    ->condition('n.type', $enabled_node_types, 'IN');
+  $result = $query->execute();
+
+  foreach ($result as $data) {
+    $node = node_load($data->nid);
+    if (node_access('view', $node)) {
+      $options[$node->nid] = drupal_strlen($node->title) > 25 ? trim(drupal_substr($node->title, 0, 25)) . '...' : $node->title;
+    }
+  }
+
+  return $options;
+}
+
+/**
+ * Determines if a user has access to non-billable hours.
+ *
+ * @param $account
+ *   Optional user account object, default is current user.
+ *
+ * @return
+ *   Returns TRUE if access granted and FALSE if not.
+ */
+function harvest_projects_can_access_nonbillable($account = NULL) {
+  global $user;
+  if (!$account->uid) {
+    $account = $user;
+  }
+
+  $allowed_roles = variable_get('harvest_projects_non-billable_access', array());
+  foreach ($account->roles as $rid => $role_name) {
+    if ($allowed_roles[$rid]) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Retrieves a list of available categories.
+ *
+ * @param $cid
+ *   To return a single category, specify it's category ID.
+ *
+ * @return
+ *   An array of categories ordered by there IDs.
+ */
+function harvest_projects_get_categories($cid = NULL) {
+  $categories = array();
+  //$result = db_query("SELECT * FROM {harvest_categories} " . (is_numeric($cid) ? "WHERE cid = :cid " : "") . "ORDER BY weight ASC", array(':cid' => $cid));
+  $query = db_select('harvest_categories', 'hc')->fields('hc')->orderBy('hc.weight', 'ASC');
+  if (is_numeric($cid)) {
+    $query->condition('hc.cid', $cid);
+  }
+  $result = $query->execute();
+
+  foreach ($result as $data) {
+    $data->roles = unserialize($data->roles);
+    if (!is_array($data->roles)) {
+      $data->roles = array();
+    }
+    $categories[$data->cid] = $data;
+  }
+  if (is_numeric($cid)) {
+    return $categories[$cid];
+  }
+  return $categories;
+}
+
+/**
+ * Determines if a user has access to a specific category.
+ *
+ * @param $category
+ *   A category array including the allowable roles.
+ *
+ * @param $account
+ *   Optional user account object, default is current user.
+ *
+ * @return
+ *   Returns TRUE if access granted and FALSE if not.
+ */
+function harvest_projects_can_access_category($category, $account = NULL) {
+  global $user;
+  if (!$account || !$account->uid) {
+    $account = user_load($user->uid);
+  }
+  
+  // Check to see if no roles are checked
+  $all_empty = TRUE;
+  foreach ($category->roles as $value) {
+    if ($value != 0) {
+      $all_empty = FALSE;
+    }
+  }
+  
+  if ($account->uid == 1 || $all_empty) {
+    return TRUE;
+  }
+  else {
+    foreach ($account->roles as $rid => $role_name) {
+      if ($category->roles[$rid]) {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Retrieves a list of categories and the terms in them.
+ *
+ * @param $include_uncategorized
+ *   Boolean value whether to include tasks which have not been placed in a category.
+ *
+ * @return
+ *   An array of categories and tasks which are in them.
+ */
+function harvest_projects_get_tasks($project_id, $include_uncategorized = TRUE) {
+  $all_categories = harvest_projects_get_categories();
+  $all_tasks = harvest_request('tasks');
+  $project_tasks = harvest_request("projects/{$project_id}/task_assignments");
+
+  // Initilize the items array so that categories are ordered properly.
+  $items = array();
+  foreach ($all_categories as $cid => $data) {
+    $items[$cid] = array();
+  }
+
+  // Place the tasks into there proper categories.
+  if (is_array($project_tasks)) {
+    foreach ($project_tasks as $task_id => $task) {
+      $cid = harvest_projects_get_assignment(NULL, 'task-category', $task_id);
+      if (is_numeric($cid) || (!$cid && $include_uncategorized)) {
+        if (!isset($items[$cid])) $items[$cid] = array();
+        if (!isset($all_categories[$cid])) {
+          $items[$cid]['category'] = 0;
+        }
+        else {
+          $items[$cid]['category'] = $all_categories[$cid];
+        }
+        
+        $items[$cid]['tasks'][$task_id] = $task;
+        $items[$cid]['tasks'][$task_id]['name'] = $all_tasks[$task_id]['name'];
+        $items[$cid]['tasks'][$task_id]['weight'] = harvest_projects_get_assignment(NULL, 'task-category', $task_id, 'weight');
+      }
+    }
+  }
+
+  // Remove any empty categories from the items.
+  foreach ($items as $cid => $tasks) {
+    if (!count($tasks)) {
+      unset($items[$cid]);
+    }
+  }
+
+  // Re-sort each categories tasks.
+  foreach (element_children($items) as $cid) {
+    uasort($items[$cid]['tasks'], 'harvest_projects_sort_tasks');
+  }
+
+  return $items;
+}
+
+/**
+ * Sorting callback for category tasks.
+ */
+function harvest_projects_sort_tasks($a, $b) {
+  if ($a['weight'] == $b['weight']) {
+      return 0;
+  }
+  return ($a['weight'] < $b['weight']) ? -1 : 1;
+}
+
+/**
+ * Saves a new category or updates an existing category.
+ *
+ * @param $cid
+ *   Unique category ID if updating an existing one.
+ *
+ * @param $name
+ *   String containing the name of the category, maxlength should be 255 characters.
+ *
+ * @param $description
+ *   Optional string containing the description of the category.
+ *
+ * @param $weight
+ *   Numerical weight of the category.
+ *
+ * @return
+ *   Sets a drupal message stating the status of the request, returns nothing.
+ */
+function harvest_projects_save_category($cid = NULL, $name, $roles = array(), $description = NULL, $billable = 1, $weight = 0) {
+  if (empty($cid)) {
+    //db_query("INSERT INTO {harvest_categories} (name, roles, description, billable, weight) VALUES ('%s', '%s', '%s', %d, %d)", trim($name), serialize($roles), trim($description), $billable, $weight);
+    $id = db_insert('harvest_categories')
+      ->fields(array(
+        'name' => trim($name),
+        'roles' => serialize($roles),
+        'description' => trim($description),
+        'billable' => $billable,
+        'weight' => $weight,
+      ))
+      ->execute();
+    drupal_set_message(t("The category '%category' has been successfully added.", array('%category' => trim($name))));
+  }
+  elseif (is_numeric($cid)) {
+    $category = harvest_projects_get_categories($cid);
+    if (!empty($category->name)) {
+      //db_query("UPDATE {harvest_categories} SET name = '%s', roles = '%s', description = '%s', billable = %d, weight = %d WHERE cid = %d", trim($name), serialize($roles), trim($description), $billable, $weight, $cid);
+      db_update('harvest_categories')
+        ->fields(array(
+          'name' => trim($name),
+          'roles' => serialize($roles),
+          'description' => trim($description),
+          'billable' => $billable,
+          'weight' => $weight,
+       ))
+       ->condition('cid', $cid)
+       ->execute();
+      drupal_set_message(t("The category '%category' has been successfully updated.", array('%category' => trim($name))));
+    }
+  }
+}
+
+/**
+ * Deletes an existing category.
+ *
+ * @param $cid
+ *   Unique category ID of which to delete.
+ */
+function harvest_projects_delete_category($cid) {
+  $category = harvest_projects_get_categories($cid);
+  if (!empty($category->name)) {
+    db_query("DELETE FROM {harvest_categories} WHERE cid = %d", $cid);
+    drupal_set_message(t("The category '%category' has been successfully deleted.", array('%category' => $category->name)));
+  }
+}
+
+/**
+ * Retrieves an existing assignment value.
+ *
+ * @param $type
+ *   String value of the type of assignment to load.
+ *
+ * @param $id
+ *   Numerical ID of the item that recieved the assignment, for example a node id.
+ *
+ * @return
+ *   The value of the column specified.
+ */
+function harvest_projects_get_assignment($aid = NULL, $type = NULL, $id = NULL, $column = 'assignment') {
+  $query = db_select('harvest_assignments', 'ha')
+    ->fields('ha', array($column));
+  //$wheres = array();
+
+  if (is_numeric($aid)) {
+    $query->condition('ha.aid', $aid);
+    //$wheres[] = "ha.aid=$aid";
+  }
+  else {
+    if (!empty($type)) {
+      $query->condition('ha.type', $type);
+      //$wheres[] = "ha.type='$type'";
+    }
+    if (!empty($id)) {
+      $query->condition('ha.id', $id);
+      //$wheres[] = "ha.id=$id";
+    }
+  }
+  
+  $result = $query->execute();
+  $records = array();
+  foreach ($result as $record) {
+    $records[] = $record;
+  }
+
+  return count($records) ? current($records[0]) : NULL;
+}
+
+
+/**
+ * Saves a new assignment.
+ *
+ * @param $aid
+ *   Unique assignment ID if updating an existing one.
+ *
+ * @param $type
+ *   String value of the type of assignment to be saved.
+ *
+ * @param $id
+ *   Numerical ID of the item recieving the assignment, for example a node id.
+ *
+ * @param $assignment
+ *   Numerical ID of the assignment, for example a user id.
+ *
+ * @param $weight
+ *   Numerical weight of the assignment, used for ordering.
+ */
+function harvest_projects_save_assignment($aid = NULL, $type, $id, $assignment, $weight = 0) {
+  if (empty($aid)) {
+    //db_query("INSERT INTO {harvest_assignments} (type, id, assignment, weight) VALUES ('%s', %d, %d, %d)", $type, $id, $assignment, $weight);
+    $id = db_insert('harvest_assignments')
+      ->fields(array(
+        'type' => $type,
+        'id' => $id,
+        'assignment' => $assignment,
+        'weight' => $weight,
+      ))
+      ->execute();
+  }
+  elseif (is_numeric($aid)) {
+    //db_query("UPDATE {harvest_assignments} SET type = '%s', id = %d, assignment = %d, weight = %d WHERE aid = %d", $type, $id, $assignment, $weight, $aid);
+    db_update('harvest_assignments')
+      ->fields(array(
+        'type' => $type,
+        'id' => $id,
+        'assignment' => $assignment,
+        'weight' => $weight,
+      ))
+      ->condition('aid', $aid)
+      ->execute();
+  }
+}
+
+/**
+ * Deletes an existing assignment.
+ */
+function harvest_projects_delete_assignment($aid) {
+  $assignment = harvest_projects_get_assignment($aid);
+  if (!empty($assignment)) {
+    //db_query("DELETE FROM {harvest_assignments} WHERE aid = %d", $aid);
+    db_delete('harvest_assignments')
+      ->condition('aid', $aid)
+      ->execute();
+  }
+}
+
+/**
+ * Calculates a series of statistical information for a specific project.
+ *
+ * @return
+ *   An array containing statistics for individual categories and tasks as well as a whole total.
+ */
+function harvest_projects_get_statistics($project_id) {
+  static $project_statistics = array();
+  if (isset($project_statistics[$project_id])) {
+    return $project_statistics[$project_id];
+  }
+
+  $statistics = array();
+  $categories = harvest_projects_get_categories();
+  $tasks = harvest_projects_get_tasks($project_id, FALSE);
+  $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd"));
+
+  if (!count($tasks)) {
+    return FALSE;
+  }
+
+  // Initiliaze the overall statistics containers.
+  $statistics['overall'] = array(
+    'progress' => 0 . '%',
+    'budget' => number_format(0, 2),
+    'expected' => number_format(0, 2),
+    'spent' => number_format(0, 2),
+    'overage' => number_format(0, 2),
+    'non-billable' => number_format(0, 2),
+  );
+
+  // Build the statistical information for our categories and tasks.
+  foreach ($tasks as $cid => $data) {
+    $statistics['categories'][$cid] = array(
+      'category' => array(
+          'progress' => 0 . '%',
+          'budget' => number_format(0, 2),
+          'expected' => number_format(0, 2),
+          'spent' => number_format(0, 2),
+          'non-billable' => number_format(0, 2),
+        ),
+      'tasks' => array(),
+    );
+
+    // Run through each individual task.
+    foreach ($data['tasks'] as $task_id => $task) {
+      $statistics['categories'][$cid]['tasks'][$task_id] = array(
+        'progress' => 0 . '%',
+        'budget' => number_format(is_numeric($task['estimate']) ? $task['estimate'] : 0, 2),
+        'expected' => number_format(0, 2),
+        'spent' => number_format(0, 2),
+        'overage' => number_format(0, 2),
+      );
+
+      if (isset($entries[$task_id]) && is_array($entries[$task_id])) {
+        // Loop through each time entry.
+        foreach ($entries[$task_id] as $entry_id => $entry) {
+          // Statistic for total spent in this task. Simply add the total hours for each entry.
+          $statistics['categories'][$cid]['tasks'][$task_id]['spent'] += (float) $entry['hours'] + 0;
+          $statistics['categories'][$cid]['tasks'][$task_id]['spent'] = number_format($statistics['categories'][$cid]['tasks'][$task_id]['spent'], 2);
+
+          // Statistic for non-billable hours.
+          if ($task['billable'] == 'false') {
+            #$statistics['categories'][$cid]['category']['non-billable'] += (float) $entry['hours'] + 0;
+            #$statistics['categories'][$cid]['category']['non-billable'] = number_format($statistics['categories'][$cid]['category']['non-billable'], 2);
+            $statistics['overall']['non-billable'] += (float) $entry['hours'] + 0;
+            $statistics['overall']['non-billable'] = number_format($statistics['overall']['non-billable'], 2);
+          }
+
+          // Statistic for total progress in this task (statically defined in entry notes). This will look for the
+          // following pattern %###% inside each entry notes. The contents between the two % symbols will be considered
+          // a statically defined progress percentage, it will override the mathametical version. Ex: %95%
+          if (!empty($entry['notes'])) {
+            $matches = array();
+            preg_match('/%([0-9]+)%/', $entry['notes'], $matches);
+            if (isset($matches[1]) && is_numeric($matches[1])) {
+              $statistics['categories'][$cid]['tasks'][$task_id]['progress'] = number_format($matches[1], 0) . '%';
+            }
+          }
+        }
+      }
+
+      // Statistic for total overage in the specific task.
+      $statistics['categories'][$cid]['tasks'][$task_id]['overage'] = $statistics['categories'][$cid]['tasks'][$task_id]['spent'] - $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+      if ($statistics['categories'][$cid]['tasks'][$task_id]['overage'] < 0) {
+        $statistics['categories'][$cid]['tasks'][$task_id]['overage'] = 0;
+      }
+      $statistics['categories'][$cid]['tasks'][$task_id]['overage'] = number_format($statistics['categories'][$cid]['tasks'][$task_id]['overage'], 2);
+
+      // Statistic for total budget in this category and overall. Simply add the total budget for each task.
+      $statistics['categories'][$cid]['category']['budget'] += $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+      $statistics['categories'][$cid]['category']['budget'] = number_format($statistics['categories'][$cid]['category']['budget'], 2);
+
+      if ($task['billable'] == 'true') {
+        $statistics['overall']['budget'] += $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+       // $statistics['overall']['budget'] = number_format($statistics['overall']['budget'], 2);
+      }
+
+      // Statistic for total spent in this category and overall. Simply add the total hours for each task.
+      $statistics['categories'][$cid]['category']['spent'] += $statistics['categories'][$cid]['tasks'][$task_id]['spent'];
+      $statistics['categories'][$cid]['category']['spent'] = number_format($statistics['categories'][$cid]['category']['spent'], 2);
+      if ($task['billable'] == 'true') {
+        $statistics['overall']['spent'] += $statistics['categories'][$cid]['tasks'][$task_id]['spent'];
+       // $statistics['overall']['spent'] = number_format($statistics['overall']['spent'], 2);
+      }
+
+      // Statistic for total progress in this task. This mathmatically calculated progress percentage uses
+      // a simple equeation that looks like ((spent / budget) * 100). Meaning that first the total spent on
+      // the task is divided by the total budget for the task, than the resulting value is multiplied by 100
+      // to get a percentage complete. This can only be performed when both spent and budget statistics are
+      // greater than zero (0). If the resulting value is greater than 100, we must reset the value to 100
+      // since a percentage should not be higher than 100.
+      $raw_progress = 0;
+      if (!(int) $statistics['categories'][$cid]['tasks'][$task_id]['progress']) {
+        if ($statistics['categories'][$cid]['tasks'][$task_id]['spent'] > 0 && $statistics['categories'][$cid]['tasks'][$task_id]['budget'] > 0) {
+          $raw_progress = $statistics['categories'][$cid]['tasks'][$task_id]['spent'] / $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+          $statistics['categories'][$cid]['tasks'][$task_id]['progress'] = number_format($raw_progress * 100, 0) . '%';
+        }
+        if ($raw_progress > 1) {
+          $statistics['categories'][$cid]['tasks'][$task_id]['progress'] = 100 . '%';
+        }
+      }
+
+      // Statistic for expected hours in this task. This is calculated by taking the floating raw progress
+      // value and multiplying it by the total hours in the budget. If the resulting value is greater than
+      // the total budget hours than the expected hours should be the same as the budget.
+      $statistics['categories'][$cid]['tasks'][$task_id]['expected'] = $raw_progress * $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+      if ($statistics['categories'][$cid]['tasks'][$task_id]['expected'] > $statistics['categories'][$cid]['tasks'][$task_id]['budget']) {
+        $statistics['categories'][$cid]['tasks'][$task_id]['expected'] = $statistics['categories'][$cid]['tasks'][$task_id]['budget'];
+      }
+      $statistics['categories'][$cid]['tasks'][$task_id]['expected'] = number_format($statistics['categories'][$cid]['tasks'][$task_id]['expected'], 2);
+
+      // Statistic for expected hours in this category and overall. Simply add the total expected hours for each task.
+      $statistics['categories'][$cid]['category']['expected'] += $statistics['categories'][$cid]['tasks'][$task_id]['expected'];
+      $statistics['categories'][$cid]['category']['expected'] = number_format($statistics['categories'][$cid]['category']['expected'], 2);
+      if ($task['billable'] == 'true') {
+        $statistics['overall']['expected'] += $statistics['categories'][$cid]['tasks'][$task_id]['expected'];
+        $statistics['overall']['expected'] = number_format($statistics['overall']['expected'], 2);
+      }
+    }
+
+    // Statistic for total progress in this category. This is calculated similarly to the per-task equation
+    // which you can see above. The difference is that we divice the overall total spent by the overall
+    // total budgetted to get the raw progress value.
+    if ($statistics['categories'][$cid]['category']['spent'] > 0 && $statistics['categories'][$cid]['category']['budget'] > 0) {
+      $raw_progress = $statistics['categories'][$cid]['category']['spent'] / $statistics['categories'][$cid]['category']['budget'];
+      $statistics['categories'][$cid]['category']['progress'] = number_format($raw_progress * 100, 0) . '%';
+      if ($raw_progress > 1) {
+        $statistics['categories'][$cid]['category']['progress'] = 100 . '%';
+      }
+    }
+  }
+
+  // Statistics for overall project progress. This is calculated by dividng the total spent time by the total
+  // budget time and than multiplying by 100.
+  if ($statistics['overall']['budget'] > 0) {
+    $statistics['overall']['progress'] = ($statistics['overall']['spent'] / $statistics['overall']['budget']) * 100;
+    if ($statistics['overall']['progress'] > 100) {
+      $statistics['overall']['progress'] = 100;
+    }
+    $statistics['overall']['progress'] = number_format($statistics['overall']['progress'], 0) . '%';
+  }
+
+  // Statistics for overall project overages. This is calculated by subtracting the total spent by the total
+  // budget. It also includes non-billable hours. If the resulting value is negative, than there are no
+  // overages, so set the value to 0.
+  $statistics['overall']['overage'] = $statistics['overall']['spent'] - $statistics['overall']['budget'];
+  if ($statistics['overall']['overage'] < 0) {
+    $statistics['overall']['overage'] = 0;
+  }
+  $statistics['overall']['overage'] = number_format($statistics['overall']['overage'], 2);
+
+  $project_statistics[$project_id] = $statistics;
+  return $statistics;
+}
+
+/**
+ * Returns a list of clients and there projects in a select list format.
+ */
+function harvest_projects_list() {
+  $clients = harvest_request('clients');
+  $projects = harvest_request('projects');
+
+  $options = array();
+  foreach ($clients as $client_id => $client) {
+    $options[$client['name']] = array();
+    if (isset($projects[$client_id]) && count($projects[$client_id])) {
+      foreach ($projects[$client_id] as $project_id => $project) {
+        if ($project['active'] == 'true') {
+          $options[$client['name']][$project_id] = $project['name'];
+        }
+      }
+    }
+    else {
+      unset($options[$client['name']]);
+    }
+    if (isset($options[$client['name']]) && !count($options[$client['name']])) {
+      unset($options[$client['name']]);
+    }
+  }
+
+  return $options;
+}
+
+/**
+ * Implements hook_form().
+ */
+function harvest_projects_form(&$node) {
+  $type = node_type_get_type($node);
+
+  if ($type->has_title) {
+    $form['title'] = array(
+      '#type' => 'textfield',
+      '#title' => check_plain($type->title_label),
+      '#required' => TRUE,
+      '#default_value' => $node->title,
+      '#weight' => -5,
+    );
+  }
+  $body_field_info = field_info_field('body');
+
+  if (in_array('harvest_project', $body_field_info['bundles']['node'])) {
+    //$form['body_field'] = node_body_field($node, $type->body_label, $type->min_word_count);
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_insert().
+ */
+function harvest_projects_node_insert($node) {
+  harvest_projects_save_assignment(NULL, 'harvest_project', $node->nid, $node->harvest_project);
+
+}
+
+/**
+ * Implements hook_update().
+ */
+function harvest_projects_node_update($node) {
+  harvest_projects_save_assignment(harvest_projects_get_assignment(NULL, 'harvest_project', $node->nid, 'aid'), 'harvest_project', $node->nid, $node->harvest_project);
+}
+
+/**
+ * Implements hook_delete().
+ */
+function harvest_projects_node_delete($node) {
+  harvest_projects_delete_assignment(harvest_projects_get_assignment(NULL, 'harvest_project', $node->nid, 'aid'));
+}
+
+/**
+ * Implements hook_load().
+ */
+function harvest_projects_node_load($nodes, $types) {
+  foreach ($nodes as $node) {
+    if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array()))) {
+      $nodes[$node->nid]->harvest_project = harvest_projects_get_assignment(NULL, 'harvest_project', $node->nid);
+    }
+    if (!isset($node->comment_count)) $nodes[$node->nid]->comment_count = 0;
+  }
+}
+
+/**
+ * Implements hook_view().
+ */
+function harvest_projects_node_view($node, $view_mode, $langcode) {
+  // $node = node_prepare($node, $teaser); // d6 relic?
+  if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array())) && $node->harvest_project) {
+    $node->content['timesheet'] = array(
+      '#markup' => theme('harvest_projects_timesheet', array('node' => $node)),
+    );
+  }
+  return $node;
+}
+
+/**
+ * Themes the harvest project timesheet.
+ * @param $node, $email_safe = FALSE
+ */
+function theme_harvest_projects_timesheet($variables) {
+  $node = $variables['node'];
+  $email_safe = isset($params['email_safe']) ? $params['email_safe'] : FALSE;
+  global $user;
+  $tasks = harvest_projects_get_tasks($node->harvest_project);
+  $statistics = harvest_projects_get_statistics($node->harvest_project);
+
+  // Build the table header.
+  $header = array(
+    array('data' => t('Task'), 'class' => array('name-column')),
+    array('data' => t('Progress'), 'class' => array('progress-column')),
+    array('data' => t('Budget'), 'class' => array('budget-column')),
+    //array('data' => t('Expected'), 'class' => array('expected-column')),
+    array('data' => t('Spent'), 'class' => array('spent-column'))
+  );
+
+  // Build the rows of categories and tasks.
+  $rows = array();
+  foreach ($tasks as $cid => $data) {
+    if (!empty($data['category']->cid)) {
+      // Only show the row if category access has been granted.
+      if (harvest_projects_can_access_category($data['category'])) {
+        $rows[] = array(
+          'data' => array(
+            array('data' => $data['category']->name, 'class' => array('name-column')),
+            array('data' => $statistics['categories'][$cid]['category']['progress'], 'class' => array('progress-column')),
+            array('data' => $statistics['categories'][$cid]['category']['budget'], 'class' => array('budget-column')),
+            //array('data' => $statistics['categories'][$cid]['category']['expected'], 'class' => array('expected-column')),
+            array('data' => $statistics['categories'][$cid]['category']['spent'], 'class' => array('spent-column')),
+          ),
+          'class' => array('category-row'),
+        );
+        foreach ($data['tasks'] as $task_id => $task) {
+          $task_name = $task['name'];
+          if (!$email_safe && $statistics['categories'][$cid]['tasks'][$task_id]['spent'] > 0) {
+            $task_name = l($task['name'], "node/{$node->nid}/entries/$task_id");
+          }
+
+          $rows[] = array(
+            'data' => array(
+              array('data' => $task_name, 'class' => array('name-column')),
+              array('data' => $statistics['categories'][$cid]['tasks'][$task_id]['progress'], 'class' => array('progress-column')),
+              array('data' => $statistics['categories'][$cid]['tasks'][$task_id]['budget'], 'class' => array('budget-column')),
+              //array('data' => $statistics['categories'][$cid]['tasks'][$task_id]['expected'], 'class' => array('expected-column')),
+              array('data' => $statistics['categories'][$cid]['tasks'][$task_id]['spent'], 'class' => array('spent-column')),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // Add a total row if task rows exist.
+  if (count($rows)) {
+    $rows[] = array(
+      'data' => array(
+        array('data' => t('Totals (Billable Only):'), 'class' => array('name-column')),
+        array('data' => $statistics['overall']['progress'], 'class' => array('progress-column')),
+        array('data' => number_format($statistics['overall']['budget'], 2), 'class' => array('budget-column')),
+        //array('data' => $statistics['overall']['expected'], 'class' => array('expected-column')),
+        array('data' => number_format($statistics['overall']['spent'], 2), 'class' => array('spent-column')),
+      ),
+      'class' => array('totals-row'),
+    );
+  }
+
+  // Process email safe table slightly different.
+  if ($email_safe) {
+    return harvest_projects_email_safe_table($header, $rows);
+  }
+  
+  return theme_table(array('header' => $header, 'rows' => $rows, 'attributes' => array(), 'colgroups' => array(), 'sticky' => FALSE, 'empty' => t('None'), 'caption' => NULL));
+}
+
+/**
+ * Makes a table email safe, adding inline CSS attributes.
+ */
+function harvest_projects_email_safe_table($header, $rows) {
+  $styles = theme('harvest_projects_email_safe');
+  $header_styles = implode('; ', $styles['cells']['header']);
+  $category_styles = implode('; ', $styles['cells']['category']);
+  $task_styles = implode('; ', $styles['cells']['task']);
+  $number_styles = implode('; ', $styles['cells']['number']);
+  $footer_styles = implode('; ', $styles['cells']['footer']);
+
+  // Add additional attributes to the table.
+  $attributes = $styles['table'];
+
+  // Add additional styles to each header column.
+  foreach ($header as $col_key => $col) {
+    $header[$col_key]['style'] = $header_styles;
+    unset($header[$col_key]['class']);
+  }
+
+  // Add additional styles to each row column.
+  foreach ($rows as $row_key => $row) {
+    $body_styles = $task_styles;
+    if ($row['class'] == 'category-row') {
+      $body_styles = $category_styles;
+    }
+    unset($rows[$row_key]['class']);
+    foreach ($row['data'] as $col_key => $col) {
+      // Styles for number fields.
+      switch ($col['class']) {
+        case 'progress-column':
+        case 'budget-column':
+        case 'expected-column':
+        case 'spent-column':
+          $body_styles = $number_styles;
+          if ($row['class'] == 'category-row') {
+            $body_styles = $category_styles . '; ' . $number_styles;
+          }
+          break;
+      }
+
+      // Add the styles in.
+      $rows[$row_key]['data'][$col_key]['style'] = $body_styles;
+      if ($row['class'] == 'totals-row') {
+        $rows[$row_key]['data'][$col_key]['style'] = $footer_styles;
+      }
+      unset($rows[$row_key]['data'][$col_key]['class']);
+    }
+  }
+
+  return theme('table', $header, $rows, $attributes);
+}
+
+/**
+ * Themable list of stlyes to use on email safe table.
+ */
+function theme_harvest_projects_email_safe() {
+  return array(
+    'table' => array(
+      'cellspacing' => '0',
+      'cellpadding' => '0',
+      'style' => 'border: 1px solid #ccc',
+    ),
+    'cells' => array(
+      'header' => array(
+        'border: 1px solid #ccc',
+        'padding: 2px 5px',
+        'font-weight: bold',
+        'background-color: #ddd',
+      ),
+      'category' => array(
+        'font-weight: bold',
+        'border: 1px solid #ccc',
+        'padding: 2px 5px',
+        'background-color: #e9e9e9',
+      ),
+      'task' => array(
+        'border: 1px solid #ccc',
+        'padding: 2px 5px',
+      ),
+      'number' => array(
+        'border: 1px solid #ccc',
+        'padding: 2px 5px',
+        'text-align: right',
+      ),
+      'footer' => array(
+        'border: 1px solid #ccc',
+        'padding: 2px 5px',
+        'font-weight: bold',
+        'text-align: right',
+        'background-color: #ddd',
+      ),
+    ),
+  );
+}
+
+/**
+ * Themes the harvest project overview block.
+ */
+function theme_harvest_projects_overview($node) {
+  $statistics = harvest_projects_get_statistics($node->harvest_project);
+
+  // Default overview for the entire project.
+  $progress = $statistics['overall']['progress'];
+  $expected = $statistics['overall']['expected'];
+  $spent = $statistics['overall']['spent'];
+  $budget = $statistics['overall']['budget'];
+  $overage = $statistics['overall']['overage'];
+  $nonbillable = $statistics['overall']['non-billable'];
+
+  // Overview for just a single task.
+  if (arg(0) == 'node' && is_numeric(arg(1)) && arg(2) == 'entries' && is_numeric(arg(3))) {
+    foreach ($statistics['categories'] as $data) {
+      foreach ($data['tasks'] as $task_id => $task) {
+        if ($task_id == arg(3)) {
+          $progress = $task['progress'];
+          $expected = $task['expected'];
+          $spent = $task['spent'];
+          $budget = $task['budget'];
+          $overage = $task['overage'];
+          $nonbillable = FALSE;
+          break;
+        }
+      }
+    }
+  }
+
+  $items = array();
+  $items[] = t('<strong>Progress:</strong> !value', array('!value' => $progress));
+  $items[] = t('<strong>Expected Hours:</strong> !value', array('!value' => $expected));
+  $items[] = t('<strong>Spent Hours:</strong> !value', array('!value' => $spent));
+  $items[] = t('<strong>Budgeted Hours:</strong> !value', array('!value' => $budget));
+  $items[] = t('<strong>Hours Over:</strong> !value', array('!value' => $overage));
+  if (harvest_projects_can_access_nonbillable() && $nonbillable !== FALSE) {
+    $items[] = t('<strong>Non-Billable Hours:</strong> !value', array('!value' => $nonbillable));
+  }
+
+  return theme('item_list', $items);
+}
+
+/**
+ * Themes a list of entries for a specific task.
+ */
+function theme_harvest_projects_task_entries($node, $task_id) {
+  $cid = harvest_projects_get_assignment(NULL, 'task-category', $task_id);
+  $category = harvest_projects_get_categories($cid);
+  if (!harvest_projects_can_access_category($category)) {
+    drupal_access_denied();
+    return;
+  }
+
+  $entries = harvest_request("projects/{$node->harvest_project}/entries?from=19000101&to=" . date("Ymd"));
+  $entries = array_reverse($entries[$task_id]);
+
+  if (count($entries)) {
+    $people = harvest_request("people");
+    $tasks = harvest_request('tasks');
+
+    // Set the new title and breadcrumb.
+    drupal_set_title($tasks[$task_id]['name'] . ' ' . t('Entries'));
+    $crumbs = array(
+      l(t('Home'), ''),
+      l(t($node->title), "node/{$node->nid}"),
+    );
+    drupal_set_breadcrumb($crumbs);
+
+    // Build the rows of entries.
+    $rows = array();
+    foreach ($entries as $entry) {
+      if ($entry['hours']) {
+        // Determine when this entry was spent.
+        if (!$last_date || $last_date != $entry['spent-at']) {
+          $date = explode('-', $entry['spent-at']);
+          $rows[] = array(
+            'data' => array(
+              array(
+                'data' => date('l, F j, Y', mktime(0, 0, 0, ltrim($date[1], '0'), ltrim($date[2], '0'), $date[0])),
+                'colspan' => 3
+              ),
+            ),
+            'class' => array('date-row'),
+          );
+        }
+
+        // Create the row
+        $rows[] = array(
+          array('data' => number_format($entry['hours'], 2), 'class' => array('hours-column')),
+          array('data' => $people[$entry['user-id']]['first-name'] . ' ' . $people[$entry['user-id']]['last-name'], 'class' => array('person-column')),
+          array('data' => !is_array($entry['notes']) ? $entry['notes'] : 'N/A', 'class' => array('notes-column')),
+        );
+
+        $last_date = $entry['spent-at'];
+      }
+    }
+
+    // Build the table header and final output.
+    $header = array(
+      array('data' => t('Hours'), 'class' => array('hours-column')),
+      array('data' => t('Person'), 'class' => array('person-column')),
+      array('data' => t('Notes'), 'class' => array('notes-column')),
+    );
+    $output = theme('table', $header, $rows);
+  }
+
+  return $output;
+}

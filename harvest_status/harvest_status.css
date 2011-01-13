@@ -1,0 +1,17 @@
+/* $Id$ */
+
+.harvest-hours {
+  font-weight: bold;
+}
+.harvest-hours.active {
+  color:red;
+}
+
+.harvest-project {
+  color: #999;
+}
+
+.harvest-notes {
+  color: #999;
+  font-style: italic;
+}

@@ -1,0 +1,9 @@
+name = Harvest Projects
+description = "Provides a project management system that integrates into your harvest account."
+version = 7.x-1.0
+core = 7.x
+package = Harvest
+dependencies[] = harvest
+files[] = harvest_projects.admin.inc
+files[] = harvest_projects.install
+files[] = harvest_projects.module

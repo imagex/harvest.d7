@@ -1,0 +1,9 @@
+name = Harvest API
+description = "Provides a link between Drupal and the harvest API."
+version = 7.x-1.0
+core = 7.x
+package = Harvest
+files[] = harvest.module
+files[] = harvest.admin.inc
+files[] = harvest.install
+files[] = harvest.parser.inc

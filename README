@@ -1,0 +1,24 @@
+Harvest.module
+**
+The Harvest module allows you to integrate Harvest Time Tracking (http://www.getharvest.com) with Drupal. Using the Harvest REST API this module will connect to Harvest to allow you to display and use information from Harvest.
+
+Typical Use Cases
+
+Create customized reports to display Harvest project data and share with team members and/or clients
+Keep your clients up to date on how many hours your team has spent on their project and on what tasks
+Remind your project team with regular updates on the project budget status
+Automatically generate time reports for contractors to add to their invoices
+Harvest Projects Module
+
+Included is a Harvest Projects module that creates a new content type which can be associated to a Harvest project. When a new project is created it will automatically download a time table overview complete with categorization, budgets, remaining time and progress percentages. The categorization system has been designed to work independently from the Harvest categorization to allow flexibility with your display. Additionally you may specify non-billable categories and specify which roles may access them.
+
+Harvest Notification Module
+
+Also included is a Harvest Notifications module that adds three types of email notifications:
+
+Daily reports which are sent every day to each person in your Harvest account (*not* Drupal users) including a summary of their work in the prior day.
+Weekly reports that depend on the content access module to send a reminder to Drupal users with access to specific projects.
+Custom reports that send a time report link to the Harvest every X weeks; useful for invoicing and summaries.
+All notifications utilize the token module and template formatting for a custom touch.
+
+This module is sponsored by ImageX Media.

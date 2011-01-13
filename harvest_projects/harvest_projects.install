@@ -1,0 +1,114 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Install, update and uninstall functions for the harvest_projects module.
+ */
+/**
+ * Implements hook_install().
+ */
+function harvest_projects_install() {
+  drupal_install_schema('harvest_projects');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function harvest_projects_uninstall() {
+  db_query("DROP TABLE {harvest_categories}");
+  db_query("DROP TABLE {harvest_assignments}");
+}
+
+/**
+ * Implements hook_schema().
+ */
+function harvest_projects_schema() {
+  $schema['harvest_categories'] = array(
+    'fields' => array(
+      'cid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'roles' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+      ),
+      'description' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+      ),
+      'billable' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('cid'),
+  );
+
+  $schema['harvest_assignments'] = array(
+    'fields' => array(
+      'aid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'id' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'assignment' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'unique keys' => array(
+      'aid_type' => array('aid', 'type'),
+    ),
+    'indexes' => array(
+      'assignment' => array('id', 'assignment'),
+    ),
+    'primary key' => array('aid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Adds the roles column to harvest categories table.
+ */
+function harvest_projects_update_6100(&$sandbox) {
+  $ret = array();
+  db_add_field($ret, 'harvest_categories', 'roles', array('type' => 'text', 'size' => 'big', 'not null' => TRUE));
+  return $ret;
+}
