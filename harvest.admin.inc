@@ -9,6 +9,7 @@
  * Menu callback; Form for harvest API settings.
  */
 function harvest_settings_form() {
+  drupal_add_css(drupal_get_path('module', 'harvest') . '/css/styles.css', array('media' => 'screen'));
   // General module settings.
   $form['cache'] = array(
     '#type' => 'fieldset',

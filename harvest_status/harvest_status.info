@@ -1,8 +1,8 @@
-; $Id$ 
+; $Id$
 
 name = Harvest Status
 description = "Provides a block to monitor individual and team status in from Harvest."
-core = 6.x
+core = 7.x
 package = Harvest
 dependencies[] = harvest
 dependencies[] = harvest_projects

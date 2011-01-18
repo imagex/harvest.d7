@@ -2,16 +2,21 @@
 
 .harvest-hours {
   font-weight: bold;
+  font-size: 12px;
 }
 .harvest-hours.active {
-  color:red;
+  color:#ff0000;
 }
 
 .harvest-project {
-  color: #999;
+  color: #000;
+	font-variant: small-caps;
 }
 
 .harvest-notes {
   color: #999;
   font-style: italic;
+}
+.day-entry {
+	font-size: 11px;
 }

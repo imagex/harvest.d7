@@ -84,6 +84,7 @@ function harvest_request($type, $options = array(), $reset = FALSE) {
 
   // Execute the request, check the response code (200 is successfull).
   $return = drupal_http_request((!empty($options['url']) ? $options['url'] : variable_get('harvest_url', '')) . '/' . $type, array('headers' => $headers));
+
   $_harvest_request_total++;
   if (empty($return->code)) {
     return FALSE;
