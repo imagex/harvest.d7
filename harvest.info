@@ -7,3 +7,9 @@ files[] = harvest.module
 files[] = harvest.admin.inc
 files[] = harvest.install
 files[] = harvest.parser.inc
+files[] = harvest.views.inc
+files[] = harvest_plugin_query_harvest.inc
+
+; Views handlers
+files[] = handlers/harvest_handler_field_email.inc
+files[] = handlers/harvest_handler_field.inc

@@ -206,3 +206,12 @@ function harvest_request_key_change($data, $target1 = 'id', $target2 = NULL) {
 
   return $revised_data;
 }
+
+/**
+ * Implements hook_views_api().
+ */
+function harvest_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
