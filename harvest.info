@@ -7,9 +7,40 @@ files[] = harvest.module
 files[] = harvest.admin.inc
 files[] = harvest.install
 files[] = harvest.parser.inc
-files[] = harvest.views.inc
-files[] = harvest_plugin_query_harvest.inc
 
-; Views handlers
-files[] = handlers/harvest_handler_field_email.inc
-files[] = handlers/harvest_handler_field.inc
+; Views includes
+files[] = harvest.views.inc
+
+; Views plugins
+files[] = views/harvest_plugin_query_harvest.inc
+files[] = views/clients/harvest_plugin_query_harvest_clients.inc
+files[] = views/entries/harvest_plugin_query_harvest_entries.inc
+files[] = views/people/harvest_plugin_query_harvest_people.inc
+files[] = views/projects/harvest_plugin_query_harvest_projects.inc
+files[] = views/tasks/harvest_plugin_query_harvest_tasks.inc
+
+; Base handlers
+files[] = views/harvest_handler_relationship.inc
+files[] = views/harvest_handler_sort.inc
+
+; Base filter handlers
+files[] = views/harvest_handler_filter.inc
+files[] = views/harvest_handler_filter_date.inc
+files[] = views/harvest_handler_filter_from_date.inc
+
+; Views clients handlers
+files[] = views/clients/harvest_handler_clients_field.inc
+
+; Views entries handlers
+files[] = views/entries/harvest_handler_entries_field.inc
+
+; Views people handlers
+files[] = views/people/harvest_handler_people_field.inc
+files[] = views/people/harvest_handler_people_field_email.inc
+files[] = views/people/harvest_handler_people_field_id.inc
+
+; Views projects handlers
+files[] = views/projects/harvest_handler_projects_field.inc
+
+; Views tasks handlers
+files[] = views/tasks/harvest_handler_tasks_field.inc

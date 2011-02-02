@@ -1,6 +1,6 @@
 <?php
 
-class harvest_handler_field extends views_handler_field {
+class harvest_handler_entries_field extends views_handler_field {
   /**
    * Called to add the field to a query.
    */
@@ -13,3 +13,10 @@ class harvest_handler_field extends views_handler_field {
     $this->field_alias = $this->real_field;
   }
 }
+
+/*class harvest_handler_tasks_field_id extends harvest_handler_tasks_field {
+  function render($values) {
+    $value = $values->{$this->field_alias};
+    return html_entity_decode($value);
+  }
+}*/

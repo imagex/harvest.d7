@@ -695,7 +695,7 @@ function harvest_projects_get_statistics($project_id) {
   $statistics = array();
   $categories = harvest_projects_get_categories();
   $tasks = harvest_projects_get_tasks($project_id, FALSE);
-  $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd"));
+  $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd")); dpm($entries);
 
   if (!count($tasks)) {
     return FALSE;
@@ -852,7 +852,7 @@ function harvest_projects_get_statistics($project_id) {
   }
   $statistics['overall']['overage'] = number_format($statistics['overall']['overage'], 2);
 
-  $project_statistics[$project_id] = $statistics;
+  $project_statistics[$project_id] = $statistics; dpm($statistics);
   return $statistics;
 }
 
