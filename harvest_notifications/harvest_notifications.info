@@ -8,3 +8,4 @@ dependencies[] = harvest_projects
 dependencies[] = token
 files[] = harvest_notifications.admin.inc
 files[] = harvest_notifications.module
+files[] = harvest_notifications.test

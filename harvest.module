@@ -9,7 +9,7 @@
  */
 function harvest_menu() {
   $items['admin/harvest'] = array(
-    'title' => 'Harvest configuration',
+    'title' => 'Harvest',
     'description' => 'Administer harvest specific settings.',
     'page callback' => 'system_admin_menu_block_page',
     'position' => 'left',
@@ -162,11 +162,14 @@ function harvest_request_cleanup($type, &$data, $keys = array()) {
       $data = harvest_request_key_change($data, 'id');
       break;
     case 'people/%/entries':
-      $data = $data['day-entries']['day-entry'];
-      if (count($data) && !$data[0]) {
-        $data = array(0 => $data);
+      if (isset($data['day-entries']['day-entry'])) {
+        $data = $data['day-entries']['day-entry'];
+        if (count($data) && (!isset($data[0]) || !$data[0])) {
+          $data = array(0 => $data);
+        }
+        $data = harvest_request_key_change($data, 'project-id', 'id');
       }
-      $data = harvest_request_key_change($data, 'project-id', 'id');
+      
       break;
   }
 }

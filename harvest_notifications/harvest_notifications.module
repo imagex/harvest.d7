@@ -8,9 +8,15 @@
  * Implements hook_cron().
  */
 function harvest_notifications_cron() {
-  harvest_notifications_daily();
+  //harvest_notifications_daily();
   harvest_notifications_weekly();
   harvest_notifications_report();
+}
+
+function _harvest_notifications_test() {
+  dpm(token_info());
+  harvest_notifications_daily();
+  return '';
 }
 
 /**
@@ -51,6 +57,12 @@ function harvest_notifications_menu() {
     'page arguments' => array('harvest_notifications_timezones_form'),
     'access arguments' => array('administer site configuration'),
     'file' => 'harvest_notifications.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/harvest/notifications/test'] = array(
+    'title' => 'Test',
+    'page callback' => '_harvest_notifications_test',
+    'access arguments' => array('administer site configuration'),
     'type' => MENU_LOCAL_TASK,
   );
 
@@ -155,19 +167,49 @@ function harvest_notifications_variable($name) {
 }
 
 /**
- * Implements hook_token_list().
+ * Implements hook_token_info().
  */
-function harvest_notifications_token_list($type = 'all') {
-  if ($type == 'harvest_notifications' || $type == 'all') {
-    $tokens['harvest_notifications']['notification-user-name'] = t("The user's name who is recieving the notification.");
-    $tokens['harvest_notifications']['notification-date'] = t("The date of the notification, not necessarily the same as today.");
-    $tokens['harvest_notifications']['notification-project'] = t("Name of notification project, if applicable.");
-    $tokens['harvest_notifications']['notification-overview'] = t("Overview of the notification text.");
-    $tokens['harvest_notifications']['notification-link'] = t("Supporting link for the notification.");
-    $tokens['harvest_notifications']['notification-interval'] = t("Interval that the notification is sent at.");
-    return $tokens;
-  }
+function harvest_notifications_token_info() {
+  $type = array(
+    'name' => t('Harvest Notifications'),
+    'description' => t('Tokens related to Harvest notifications.'),
+    'needs-data' => 'harvest_notification',
+  );
+
+  // Core tokens for Harvest notifications.
+  $harvest_notification['user-name'] = array(
+    'name' => t("User Name"),
+    'description' => t("The user's name who is recieving the notification."),
+  );
+  $harvest_notification['date'] = array(
+    'name' => t("Date"),
+    'description' => t("The date of the notification, not necessarily the same as today."),
+    'type' => 'date',
+  );
+  $harvest_notification['project'] = array(
+    'name' => t("Project"),
+    'description' => t("Name of notification project, if applicable."),
+  );
+  $harvest_notification['overview'] = array(
+    'name' => t("Overview"),
+    'description' => t("Overview of the notification text."),
+  );
+  $harvest_notification['link'] = array(
+    'name' => t("Link"),
+    'description' => t("Supporting link for the notification."),
+  );
+  $harvest_notification['interval'] = array(
+    'name' => t("Interval"),
+    'description' => t("Interval that the notification is sent at."),
+  );
+
+  return array(
+    'types' => array('harvest_notification' => $type),
+    'tokens' => array('harvest_notification' => $harvest_notification),
+  );
 }
+
+
 
 /**
  * Implements hook_token_values().
@@ -185,6 +227,70 @@ function harvest_notifications_token_values($type, $object = NULL, $options = ar
 }
 
 /**
+ * Implements hook_tokens().
+ */
+function harvest_notifications_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $url_options = array('absolute' => TRUE);
+  if (isset($options['language'])) {
+    $url_options['language'] = $options['language'];
+    $language_code = $options['language']->language;
+  }
+  else {
+    $language_code = NULL;
+  }
+  $sanitize = !empty($options['sanitize']);
+
+  $replacements = array();
+
+  if ($type == 'harvest_notification' && !empty($data['harvest_notification'])) {
+    $harvest_notification = $data['harvest_notification'];
+
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        // Simple key values on the node.
+        case 'user-name':
+          $replacements[$original] = $harvest_notification['person']['first-name'] . ' ' . $harvest_notification['person']['last-name'];
+          break;
+
+        case 'project':
+          $replacements[$original] = $sanitize ? check_plain($harvest_notification['project']) : $harvest_notification['project'];
+          break;
+
+        case 'link':
+          $replacements[$original] = url($link);
+          break;
+          
+        case 'interval':
+          $replacements[$original] = $harvest_notification['interval'];
+          break;
+
+        case 'overview':
+          $replacements[$original] = $sanitize ? filter_xss($harvest_notification['overview']) : $harvest_notification['overview'];
+          break;
+
+        // Default values for the chained tokens handled below.
+        case 'date':
+          $replacements[$original] = format_date($harvest_notification['date'], 'medium', '', NULL, $language_code);
+          break;
+      }
+    }
+
+    if ($author_tokens = token_find_with_prefix($tokens, 'author')) {
+      $author = user_load($node->uid);
+      $replacements += token_generate('user', $author_tokens, array('user' => $author), $options);
+    }
+
+    if ($created_tokens = token_find_with_prefix($tokens, 'created')) {
+      $replacements += token_generate('date', $created_tokens, array('date' => $node->created), $options);
+    }
+  }
+
+  return $replacements;
+}
+
+
+
+/**
  * Puts together the peices of a notification and sends it on it's way.
  *
  * @param $type
@@ -195,16 +301,22 @@ function harvest_notifications_token_values($type, $object = NULL, $options = ar
  */
 function harvest_notifications_send($type, $data) {
   global $user;
+  $account = user_load($user->uid);
+  
   $params = array('data' => $data);
-  if (variable_get('harvest_notifications_debug', 0) && ($site_mail = variable_get('site_mail', ''))) {
-    $to = $site_mail;
+  if (variable_get('harvest_notifications_debug', 0)) {
+    $subject = harvest_notifications_variable("harvest_notifications_{$type}_subject");
+    $subject = token_replace($subject, array('harvest_notification' => $params['data']));
+    $body = nl2br(harvest_notifications_variable("harvest_notifications_{$type}_body"));
+    $body = token_replace($body, array('harvest_notification' => $params['data']));
+    watchdog('harvest_notifications', 'TO: ' . $data['person']['email'] . ' <br /><strong>SUBJECT: ' . $subject . '</strong> <br />' . $body);
   }
   else {
     $to = $data['account']->mail ? $data['account']->mail : $data['person']['email'];
+    $from = harvest_notifications_variable('harvest_notifications_report_from');
+    $language = user_preferred_language((isset($data['account']) && $data['account']) ? $data['account'] : $user);
+    drupal_mail('harvest_notifications', $type, $to, $language, $params, $from);
   }
-  $from = harvest_notifications_variable('harvest_notifications_report_from');
-  $language = user_preferred_language($data['account'] ? $data['account'] : $user);
-  drupal_mail('harvest_notifications', $type, $to, $language, $params, $from);
 }
 
 /**
@@ -213,9 +325,9 @@ function harvest_notifications_send($type, $data) {
 function harvest_notifications_mail($key, &$message, $params) {
   $message['headers']['Content-Type'] = 'text/html; charset=UTF-8; format=flowed';
   $message['subject'] = harvest_notifications_variable("harvest_notifications_{$key}_subject");
-  $message['subject'] = token_replace($message['subject'], array('harvest_notifications' => $params['data']));
+  $message['subject'] = token_replace($message['subject'], array('harvest_notification' => $params['data']));
   $message['body'][0] = nl2br(harvest_notifications_variable("harvest_notifications_{$key}_body"));
-  $message['body'][0] = token_replace($message['body'][0], array('harvest_notifications' => $params['data']));
+  $message['body'][0] = token_replace($message['body'][0], array('harvest_notification' => $params['data']));
 }
 
 /**
@@ -280,10 +392,10 @@ function harvest_notifications_daily() {
     // If lastsend is not an array, reset it.
     if (!is_array($lastsend)) {
       $lastsend = array();
-    }
+    } dpm($lastsend, '$lastsend'); $lastsend = array();
 
     // Load up the people, projects, and tasks.
-    $people = harvest_request('people');
+    $people = harvest_request('people'); dpm($people, '$people');
     $projects = harvest_request('projects', array('type modifier' => 'projects_by_id'));
     $tasks = harvest_request('tasks');
 
@@ -294,17 +406,20 @@ function harvest_notifications_daily() {
         $person_id = $person['id'];
 
         // Determine local time for this person.
+        if (!isset($timezones[$person_id])) {
+          $timezones[$person_id] = 'Default'; // If a timezone for a particular person isn't set, set it.
+        }
         $local_time = harvest_notifications_local_time($timezones[$person_id]);
 
         // Continue only if the timestamp generated is for a previous day.
         $timestamp = strtotime('-1 day', $local_time);
-        if (!$lastsend[$person_id] || gmdate('mdY', $timestamp) != gmdate('mdY', $lastsend[$person_id])) {
+        if ((!isset($lastsend[$person_id]) || !$lastsend[$person_id]) || gmdate('mdY', $timestamp) != gmdate('mdY', $lastsend[$person_id])) {
 
           // Only attempt to send a daily report for day other than today.
           if (gmdate('mdY', $timestamp) != gmdate('mdY', $local_time)) {
             if (valid_email_address($person['email'])) {
               $entries = harvest_request("people/$person_id/entries?from=" . gmdate('Ymd', $timestamp) . "&to=" . gmdate('Ymd', $timestamp), array(), TRUE);
-              if (is_array($entries) && count($entries)) {
+              if (is_array($entries) && count($entries) && !isset($entries['day-entries'])) {
                 $daily_overview = '';
                 $total_day_hours = 0;
 

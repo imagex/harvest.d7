@@ -12,6 +12,8 @@ class harvest_plugin_query_harvest extends views_plugin_query {
     $this->params = '';
     $this->start = '';
     $this->orderby = array();
+    $this->where = array();
+    $this->where_php = array();
   }
   
   function ensure_table() {
@@ -70,7 +72,7 @@ class harvest_plugin_query_harvest extends views_plugin_query {
   }
   
   function add_where($group, $clause) {
-    
+    //$this->where[$group]['clauses'][] = $clause;
   }
   
   function add_orderby($table, $field, $order, $alias = '', $params = array()) {
@@ -136,12 +138,12 @@ class harvest_plugin_query_harvest extends views_plugin_query {
     return harvest_request(str_ireplace('harvest_api_', '', trim($this->base_table)));
   }
   
-  function execute(&$view) {
+  function execute(&$view) {    
     if (isset($view->build_info)) {
       $query = $view->build_info['query'];
     }
     
-    dpm($view);
+    dpm($view); dpm($view->argument['project_id']);
     
     if (1) { // if $query
       $start = $this->microtime();
@@ -179,16 +181,16 @@ class harvest_plugin_query_harvest extends views_plugin_query {
       
       dpm($data, $this->base_table . ' table');
       
-      foreach ($data as $key => $val) {
-        $view->result[$key] = (object) $val;
-        $this->$key = $val;
+      if (is_array($data)) {
+        foreach ($data as $key => $val) {
+          $view->result[$key] = (object) $val;
+          $this->$key = $val;
+        }
       }
       
       $view->total_rows = count($view->result);
       $view->execute_time = $this->microtime() - $start;
     }
-    //dpm($view, '$view');
-    //dpm($this, '$this');
   }
   
   function add_signature(&$view) {

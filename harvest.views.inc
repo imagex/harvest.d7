@@ -169,6 +169,39 @@ function harvest_views_data() {
     'query class' => 'harvest_query_statistics',
   );
   
+  $data['harvest_api_statistics']['budget'] = array(
+    'title' => t('Budget'),
+    'field' => array(
+      'handler' => 'harvest_handler_statistics_field_budget',
+    ),
+  );
+  
+  $data['harvest_api_statistics']['spent'] = array(
+    'title' => t('Spent'),
+    'field' => array(
+      'handler' => 'harvest_handler_statistics_field_spent',
+    ),
+    'filter' => array(
+      'handler' => 'harvest_handler_filter_numeric',
+    ),
+  );
+  
+  $data['harvest_api_statistics']['task-name'] = array(
+    'title' => t('Task'),
+    'field' => array(
+      'handler' => 'harvest_handler_statistics_field_task_name',
+    ),
+  );
+  
+  $data['harvest_api_statistics']['project_id'] = array(
+    'title' => t('Project ID'),
+    'help' => t('Unique ID for the project.'),
+    'argument' => array(
+      'handler' => 'harvest_handler_argument_project_id',
+      'numeric' => TRUE,
+    ),
+  );
+  
   $data['harvest_api_statistics']['statistics-spent-at'] = array(
     'title' => t('Spent at'),
     'filter' => array(
@@ -213,7 +246,7 @@ function harvest_views_plugins() {
       'harvest_query_statistics' => array(
         'title' => t('Harvest API Statistics'),
         'help' => t('Query will be generated and run using Harvest API.'),
-        'handler' => 'harvest_plugin_query_harvest_entries',
+        'handler' => 'harvest_plugin_query_harvest_statistics',
       ),
     ),
   );

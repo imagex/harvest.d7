@@ -17,16 +17,19 @@ files[] = views/clients/harvest_plugin_query_harvest_clients.inc
 files[] = views/entries/harvest_plugin_query_harvest_entries.inc
 files[] = views/people/harvest_plugin_query_harvest_people.inc
 files[] = views/projects/harvest_plugin_query_harvest_projects.inc
+files[] = views/statistics/harvest_plugin_query_harvest_statistics.inc
 files[] = views/tasks/harvest_plugin_query_harvest_tasks.inc
 
 ; Base handlers
+files[] = views/harvest_handler_argument_project_id.inc
 files[] = views/harvest_handler_relationship.inc
 files[] = views/harvest_handler_sort.inc
 
 ; Base filter handlers
 files[] = views/harvest_handler_filter.inc
+files[] = views/harvest_handler_filter_numeric.inc
 files[] = views/harvest_handler_filter_date.inc
-files[] = views/harvest_handler_filter_from_date.inc
+files[] = views/harvest_handler_filter_spent_at_date.inc
 
 ; Views clients handlers
 files[] = views/clients/harvest_handler_clients_field.inc
@@ -41,6 +44,9 @@ files[] = views/people/harvest_handler_people_field_id.inc
 
 ; Views projects handlers
 files[] = views/projects/harvest_handler_projects_field.inc
+
+; Views statistics handlers
+files[] = views/statistics/harvest_handler_statistics_field.inc
 
 ; Views tasks handlers
 files[] = views/tasks/harvest_handler_tasks_field.inc

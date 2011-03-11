@@ -15,7 +15,7 @@ function harvest_notifications_settings_form() {
   $form['harvest_notifications_debug'] = array(
     '#type' => 'checkbox',
     '#title' => t('Enable debug/test mode'),
-    '#description' => t('When enabled all emails will be redirected to the site email address.'),
+    '#description' => t('When enabled all emails will be logged instead of being sent out.'),
     '#default_value' => variable_get('harvest_notifications_debug', 0),
   );
 
@@ -188,12 +188,15 @@ function harvest_notifications_settings_form() {
   );
 
   // Tokens
+  
+  $tokens = token_info(); dpm($tokens);
+  
   $form['tokens'] = array(
     '#type' => 'fieldset',
     '#title' => t('Notification replacements'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
-    '#value' => theme('token_help', 'harvest_notifications'),
+    '#value' => theme('token_tree', array('token_types' => 'all')),
   );
 
   return system_settings_form($form);

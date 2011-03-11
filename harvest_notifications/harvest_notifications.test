@@ -1,0 +1,17 @@
+<?php
+class HarvestNotificationTestCase extends DrupalWebTestCase {
+  protected $privileged_user;
+  
+  public static function getInfo() {
+    return array(
+      'name' => 'Harvest Notifications',
+      'description' => 'Ensure that Harvest Notifications module functions properly.',
+      'group' => 'Harvest',
+    );
+  }
+  
+  public function setUp() {
+    parent::setUp('harvest notifications');
+  }
+}
+?>

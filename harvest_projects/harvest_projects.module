@@ -686,7 +686,7 @@ function harvest_projects_delete_assignment($aid) {
  * @return
  *   An array containing statistics for individual categories and tasks as well as a whole total.
  */
-function harvest_projects_get_statistics($project_id) {
+function harvest_projects_get_statistics($project_id, $vars = array()) {
   static $project_statistics = array();
   if (isset($project_statistics[$project_id])) {
     return $project_statistics[$project_id];
@@ -695,7 +695,16 @@ function harvest_projects_get_statistics($project_id) {
   $statistics = array();
   $categories = harvest_projects_get_categories();
   $tasks = harvest_projects_get_tasks($project_id, FALSE);
-  $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd")); dpm($entries);
+  if (isset($vars['query']) && strlen($vars['query']) > 1) {
+    if (stripos($vars['query'], '&to=') === FALSE) {
+      $vars['query'] .= '&to=' . date('Ymd');
+    }
+    $entries = harvest_request("projects/{$project_id}/entries?" . $vars['query']);
+  }
+  else {
+    $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd"));
+  }
+  dpm($entries, 'entries');
 
   if (!count($tasks)) {
     return FALSE;
@@ -852,7 +861,7 @@ function harvest_projects_get_statistics($project_id) {
   }
   $statistics['overall']['overage'] = number_format($statistics['overall']['overage'], 2);
 
-  $project_statistics[$project_id] = $statistics; dpm($statistics);
+  $project_statistics[$project_id] = $statistics;
   return $statistics;
 }
 

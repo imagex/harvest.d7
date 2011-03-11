@@ -21,7 +21,21 @@ class harvest_handler_statistics_field_id extends harvest_handler_statistics_fie
   }
 }
 
-class harvest_handler_statistics_field_name extends harvest_handler_statistics_field {
+class harvest_handler_statistics_field_budget extends harvest_handler_statistics_field {
+  function render($values) {
+    $value = $values->{$this->field_alias};
+    return html_entity_decode($value);
+  }
+}
+
+class harvest_handler_statistics_field_spent extends harvest_handler_statistics_field {
+  function render($values) {
+    $value = $values->{$this->field_alias};
+    return html_entity_decode($value);
+  }
+}
+
+class harvest_handler_statistics_field_task_name extends harvest_handler_statistics_field {
   function render($values) {
     $value = $values->{$this->field_alias};
     return html_entity_decode($value);
