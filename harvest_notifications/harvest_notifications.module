@@ -311,8 +311,18 @@ function harvest_notifications_send($type, $data) {
     watchdog('harvest_notifications', 'TO: ' . $data['person']['email'] . ' <br /><strong>SUBJECT: ' . $subject . '</strong> <br />' . $body);
   }
   else {
-    $to = $data['account']->mail ? $data['account']->mail : $data['person']['email'];
-    $from = harvest_notifications_variable('harvest_notifications_report_from');
+    $to = (!empty($account) && $data['account']->mail) ? $data['account']->mail : $data['person']['email'];
+    switch ($type) {
+    case 'daily' :
+      $from = harvest_notifications_variable('harvest_notifications_daily_from');
+      break;
+    case 'weekly' :
+      $from = harvest_notifications_variable('harvest_notifications_weekly_from');
+      break;
+    case 'report' :
+      $from = harvest_notifications_variable('harvest_notifications_reports_from');
+      break;
+    }
     $language = user_preferred_language((isset($data['account']) && $data['account']) ? $data['account'] : $user);
     drupal_mail('harvest_notifications', $type, $to, $language, $params, $from);
   }
@@ -381,7 +391,11 @@ function harvest_notifications_local_time($timezone) {
 }
 
 /**
- * Processes and sends a daily overview to users.
+ * Processes and sends a daily overview to active (non-archived) users.
+ *
+ * For each active person
+ *   If the person has not had a report sent in the last 24 hours
+ *     Send a report
  */
 function harvest_notifications_daily() {
   if (harvest_notifications_variable('harvest_notifications_daily')) {
@@ -404,21 +418,33 @@ function harvest_notifications_daily() {
       foreach ($people as $person) {
         $person_id = $person['id'];
 
+        // Skip non-active people.
+        if ($person['is-active'] == 'false') {
+          continue;
+        }
+
         // Determine local time for this person.
         if (!isset($timezones[$person_id])) {
-          // If a timezone for a particular person isn't set, set it.
+	  // If a timezone for a particular person isn't set, set the default timezone.
           $timezones[$person_id] = 'Default';
         }
         $local_time = harvest_notifications_local_time($timezones[$person_id]);
 
-        // Continue only if the timestamp generated is for a previous day.
+        // Continue only if it's been 24 hours since the last daily report was sent.
+
+        // Timestamp is now (in the person's local timezone) - 24 hours.
         $timestamp = strtotime('-1 day', $local_time);
-        if ((!isset($lastsend[$person_id]) || !$lastsend[$person_id]) || gmdate('mdY', $timestamp) != gmdate('mdY', $lastsend[$person_id])) {
+
+        if (!isset($lastsend[$person_id]) ||
+            !$lastsend[$person_id] ||
+            $timestamp - $lastsend[$person_id] >= 24 * 60 * 60) {
 
           // Only attempt to send a daily report for day other than today.
           if (gmdate('mdY', $timestamp) != gmdate('mdY', $local_time)) {
             if (valid_email_address($person['email'])) {
-              $entries = harvest_request("people/$person_id/entries?from=" . gmdate('Ymd', $timestamp) . "&to=" . gmdate('Ymd', $timestamp), array(), TRUE);
+              $entries = harvest_request("people/$person_id/entries?from=" .
+                                         gmdate('Ymd', $timestamp) . "&to=" .
+                                         gmdate('Ymd', $timestamp), array(), TRUE);
               if (is_array($entries) && count($entries) && !isset($entries['day-entries'])) {
                 $daily_overview = '';
                 $total_day_hours = 0;
@@ -436,7 +462,7 @@ function harvest_notifications_daily() {
                 $daily_overview .= "Total Hours: " . number_format($total_day_hours, 2);
 
                 $lastsend[$person_id] = $timestamp;
-                harvest_notifications_send('daily', array('person' => $person, 'overview' => nl2br($daily_overview), 'date' => $timestamp));
+                harvest_notifications_send('daily', array('person' => $person, 'overview' => $daily_overview, 'date' => $timestamp));
               }
             }
           }
