@@ -4,20 +4,6 @@
  * @file
  * Install, update and uninstall functions for the harvest_projects module.
  */
-/**
- * Implements hook_install().
- */
-function harvest_projects_install() {
-  drupal_install_schema('harvest_projects');
-}
-
-/**
- * Implements hook_uninstall().
- */
-function harvest_projects_uninstall() {
-  db_query("DROP TABLE {harvest_categories}");
-  db_query("DROP TABLE {harvest_assignments}");
-}
 
 /**
  * Implements hook_schema().

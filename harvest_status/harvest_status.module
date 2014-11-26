@@ -18,7 +18,7 @@ function harvest_status_init() {
  */
 function harvest_status_menu() {
   // administration page
-  $items['admin/harvest/status'] = array(
+  $items['admin/config/services/harvest/status'] = array(
     'title' => 'Harvest Status settings',
     'description' => 'Select users to be included in the Harvest Status block',
     'page callback' => 'drupal_get_form',

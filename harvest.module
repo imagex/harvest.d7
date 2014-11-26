@@ -8,7 +8,7 @@
  * Implements hook_menu().
  */
 function harvest_menu() {
-  $items['admin/harvest'] = array(
+  $items['admin/config/services/harvest'] = array(
     'title' => 'Harvest',
     'description' => 'Administer harvest specific settings.',
     'page callback' => 'system_admin_menu_block_page',
@@ -18,7 +18,7 @@ function harvest_menu() {
     'file' => 'system.admin.inc',
     'file path' => drupal_get_path('module', 'system'),
   );
-  $items['admin/harvest/api'] = array(
+  $items['admin/config/services/harvest/api'] = array(
     'title' => 'API settings',
     'description' => 'Configure harvest account settings and cache life.',
     'page callback' => 'drupal_get_form',

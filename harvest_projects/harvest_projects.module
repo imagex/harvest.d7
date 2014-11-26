@@ -77,7 +77,7 @@ function harvest_projects_init() {
  * Implements hook_menu().
  */
 function harvest_projects_menu() {
-  $items['admin/harvest/projects'] = array(
+  $items['admin/config/services/harvest/projects'] = array(
     'title' => 'Project settings',
     'description' => 'Configure harvest project settings.',
     'page callback' => 'drupal_get_form',
@@ -85,7 +85,7 @@ function harvest_projects_menu() {
     'access arguments' => array('administer harvest projects'),
     'file' => 'harvest_projects.admin.inc',
   );
-  $items['admin/harvest/categories'] = array(
+  $items['admin/config/services/harvest/categories'] = array(
     'title' => 'Task categories',
     'description' => 'Manage organizational task categories.',
     'page callback' => 'drupal_get_form',
@@ -93,12 +93,12 @@ function harvest_projects_menu() {
     'access arguments' => array('administer harvest projects'),
     'file' => 'harvest_projects.admin.inc',
   );
-  $items['admin/harvest/categories/list'] = array(
+  $items['admin/config/services/harvest/categories/list'] = array(
     'title' => 'List',
     'weight' => -1,
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
-  $items['admin/harvest/categories/add'] = array(
+  $items['admin/config/services/harvest/categories/add'] = array(
     'title' => 'Add category',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('harvest_projects_category_form'),
@@ -106,7 +106,7 @@ function harvest_projects_menu() {
     'file' => 'harvest_projects.admin.inc',
     'type' => MENU_LOCAL_TASK,
   );
-  $items['admin/harvest/categories/edit/%'] = array(
+  $items['admin/config/services/harvest/categories/edit/%'] = array(
     'title' => 'Edit category',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('harvest_projects_category_form', 4),
@@ -114,7 +114,7 @@ function harvest_projects_menu() {
     'file' => 'harvest_projects.admin.inc',
     'type' => MENU_CALLBACK,
   );
-  $items['admin/harvest/categories/delete/%'] = array(
+  $items['admin/config/services/harvest/categories/delete/%'] = array(
     'title' => 'Delete category',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('harvest_projects_delete_category_form', 4),
@@ -174,8 +174,9 @@ function harvest_projects_form_alter(&$form, &$form_state, $form_id) {
   if (in_array($form_id, $enabled_node_types)) {
     $form['harvest_projects'] = array(
       '#type' => 'fieldset',
-      '#group' => 'additional_settings',
+      //'#group' => 'additional_settings',
       '#title' => t('Harvest Projects settings'),
+      '#collapsible' => FALSE,
     );
     $form['harvest_projects']['harvest_project'] = array(
       '#type' => 'select',
@@ -185,6 +186,7 @@ function harvest_projects_form_alter(&$form, &$form_state, $form_id) {
       '#required' => FALSE,
       '#default_value' => isset($form['#node']->harvest_project) ? $form['#node']->harvest_project : '',
       '#weight' => -4,
+      '#required' => TRUE,
     );
   }
   
@@ -704,7 +706,6 @@ function harvest_projects_get_statistics($project_id, $vars = array()) {
   else {
     $entries = harvest_request("projects/{$project_id}/entries?from=19000101&to=" . date("Ymd"));
   }
-  dpm($entries, 'entries');
 
   if (!count($tasks)) {
     return FALSE;
@@ -944,7 +945,7 @@ function harvest_projects_node_delete($node) {
  */
 function harvest_projects_node_load($nodes, $types) {
   foreach ($nodes as $node) {
-    if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array()))) {
+    if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array('harvest_project')))) {
       $nodes[$node->nid]->harvest_project = harvest_projects_get_assignment(NULL, 'harvest_project', $node->nid);
     }
     if (!isset($node->comment_count)) $nodes[$node->nid]->comment_count = 0;
@@ -956,7 +957,8 @@ function harvest_projects_node_load($nodes, $types) {
  */
 function harvest_projects_node_view($node, $view_mode, $langcode) {
   // $node = node_prepare($node, $teaser); // d6 relic?
-  if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array())) && $node->harvest_project) {
+  $harvest_project = harvest_projects_get_assignment(NULL, 'harvest_project', $node->nid);
+  if (in_array($node->type, variable_get('harvest_projects_content_types_to_attach_to', array('harvest_project'))) && $harvest_project) {
     $node->content['timesheet'] = array(
       '#markup' => theme('harvest_projects_timesheet', array('node' => $node)),
     );

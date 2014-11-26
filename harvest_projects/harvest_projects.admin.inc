@@ -68,7 +68,7 @@ function harvest_projects_categories_form() {
     );
   }
   else {
-    drupal_set_message(t('There are no existing categories, you can now:') . ' ' . l(t('add one'), 'admin/harvest/categories/add'), 'warning');
+    drupal_set_message(t('There are no existing categories, you can now:') . ' ' . l(t('add one'), 'admin/config/services/harvest/categories/add'), 'warning');
   }
 
   return $form;
@@ -101,7 +101,7 @@ function theme_harvest_projects_categories_form(&$variables) {
         render($form['name'][$cid]),
         drupal_strlen(trim(render($form['description'][$cid]))) ? t('Yes') : t('No'),
         render($form['billable'][$cid]) ? t('Yes') : t('No'),
-        l(t('Edit'), "admin/harvest/categories/edit/$cid") . ', ' . l(t('Delete'), "admin/harvest/categories/delete/$cid"),
+        l(t('Edit'), "admin/config/services/harvest/categories/edit/$cid") . ', ' . l(t('Delete'), "admin/config/services/harvest/categories/delete/$cid"),
         render($form['weight'][$cid]),
       ),
       'class' => array('draggable'),
@@ -128,7 +128,7 @@ function harvest_projects_category_form($form, &$form_state, $cid = NULL) {
     $category = harvest_projects_get_categories($cid);
     if (empty($category->name)) {
       drupal_set_message(t("Sorry, the category requested doesn't seem to exist."));
-      drupal_goto('admin/harvest/categories');
+      drupal_goto('admin/config/services/harvest/categories');
     }
   }
 
@@ -172,7 +172,7 @@ function harvest_projects_category_form($form, &$form_state, $cid = NULL) {
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Save category'),
-    '#suffix' => l(t('Cancel'), 'admin/harvest/categories'),
+    '#suffix' => l(t('Cancel'), 'admin/config/services/harvest/categories'),
   );
   return $form;
 }
@@ -182,7 +182,7 @@ function harvest_projects_category_form($form, &$form_state, $cid = NULL) {
  */
 function harvest_projects_category_form_submit(&$form, $form_state) {
   harvest_projects_save_category($form_state['values']['cid'], $form_state['values']['name'], $form_state['values']['roles'], $form_state['values']['description'], $form_state['values']['billable'], $form_state['values']['weight']);
-  $form['#redirect'] = 'admin/harvest/categories';
+  $form['#redirect'] = 'admin/config/services/harvest/categories';
 }
 
 /**
@@ -192,13 +192,13 @@ function harvest_projects_delete_category_form($form_state, $cid) {
   $category = harvest_projects_get_categories($cid);
   if (empty($category->name)) {
     drupal_set_message(t("Sorry, the category requested doesn't seem to exist."));
-    drupal_goto('admin/harvest/categories');
+    drupal_goto('admin/config/services/harvest/categories');
   }
   $form['cid'] = array(
     '#type' => 'hidden',
     '#value' => $cid,
   );
-  return confirm_form($form, t("Are you sure you want to delete the '%category' category?", array('%category' => $category->name)), 'admin/harvest/categories', NULL, t('Delete'));
+  return confirm_form($form, t("Are you sure you want to delete the '%category' category?", array('%category' => $category->name)), 'admin/config/services/harvest/categories', NULL, t('Delete'));
 }
 
 /**
@@ -206,7 +206,7 @@ function harvest_projects_delete_category_form($form_state, $cid) {
  */
 function harvest_projects_delete_category_form_submit(&$form, $form_state) {
   harvest_projects_delete_category($form_state['values']['cid']);
-  $form['#redirect'] = 'admin/harvest/categories';
+  $form['#redirect'] = 'admin/config/services/harvest/categories';
 }
 
 /**

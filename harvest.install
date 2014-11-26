@@ -4,12 +4,6 @@
  * @file
  * Install, update and uninstall functions for the harvest module.
  */
-/**
- * Implements hook_install().
- */
-function harvest_install() {
-  drupal_install_schema('harvest');
-}
 
 /**
  * Implements hook_uninstall().

@@ -3,6 +3,7 @@ description = "Provides various harvest project notifications."
 version = 7.x-1.0
 core = 7.x
 package = Harvest
+configure = admin/config/services/harvest/notifications
 dependencies[] = harvest
 dependencies[] = harvest_projects
 dependencies[] = token

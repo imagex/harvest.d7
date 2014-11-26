@@ -44,14 +44,14 @@ function harvest_settings_form() {
     '#description' => t('Enter the email of the account we will login to during an API request. It is recommended that a separate administrator account is setup.'),
     '#required' => TRUE,
     '#default_value' => variable_get('harvest_email', ''),
-    '#prefix' => variable_get('harvest_login', '') ? t('<div class="warning">To change the email you must enter a password.</div>') : '',
+    '#prefix' => variable_get('harvest_login', '') ? t('<div class="warning messages">To change the email you must enter a password.</div>') : '',
   );
   $form['account']['pass'] = array(
     '#type' => 'password',
     '#title' => t('Password'),
     '#description' => t('This password will be encoded using base64, the original value will not be stored for security reasons.'),
     '#required' => variable_get('harvest_login', '') ? FALSE : TRUE,
-    '#prefix' => variable_get('harvest_login', '') ? t('<div class="warning">Password has been saved, you can specify a new one below.</div>') : '',
+    '#prefix' => variable_get('harvest_login', '') ? t('<div class="warning messages">Password has been saved, you can specify a new one below.</div>') : '',
   );
 
   $form['submit'] = array(

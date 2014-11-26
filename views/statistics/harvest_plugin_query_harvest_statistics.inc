@@ -26,11 +26,10 @@ class harvest_plugin_query_harvest_statistics extends harvest_plugin_query_harve
       $argument_project_id = $view->argument['project_id'];
       $tasks_data = harvest_projects_get_tasks($argument_project_id->value[0]);
       
-      $queries = $this->array_flatten($this->where); dpm($this->where);
-      $query = implode('&', $queries); dpm($query, 'query string');
+      $queries = $this->array_flatten($this->where);
+      $query = implode('&', $queries);
       
       $statistics_data = harvest_projects_get_statistics($argument_project_id->value[0], array('query' => $query));
-      dpm($statistics_data, 'statistics_data'); dpm($tasks_data, 'tasks_data');
       
       // Apply filters with PHP
       $this->where_php($statistics_data);
@@ -42,10 +41,7 @@ class harvest_plugin_query_harvest_statistics extends harvest_plugin_query_harve
         }
       }
       $data[] = (object) array_merge($statistics_data['overall'], array('category_id' => 0, 'task_id' => 0, 'task-name' => t('Totals (Billable Only):')));
-      dpm($data);
     }
-    dpm($this, 'this (query)');
-    dpm($view, 'view'); foreach($view->filter as $filter) dpm($filter);
     
     $view->result = $data;
     $view->total_rows = count($view->result);
@@ -55,8 +51,6 @@ class harvest_plugin_query_harvest_statistics extends harvest_plugin_query_harve
   function where_php(&$data, $filters = array()) {
     $filters = $this->where_php;
     $adjustments = array();
-    
-    dpm($filters, 'filters');
     
     // Go through the data
     foreach ($data['categories'] as $category_id => $category) {

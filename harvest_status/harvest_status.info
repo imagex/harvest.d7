@@ -4,6 +4,7 @@ name = Harvest Status
 description = "Provides a block to monitor individual and team status in from Harvest."
 core = 7.x
 package = Harvest
+configure = admin/config/services/harvest/status
 dependencies[] = harvest
 dependencies[] = harvest_projects
 files[] = harvest_status.module

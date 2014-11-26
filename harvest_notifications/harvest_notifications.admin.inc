@@ -189,7 +189,7 @@ function harvest_notifications_settings_form() {
 
   // Tokens
   
-  $tokens = token_info(); dpm($tokens);
+  $tokens = token_info();
   
   $form['tokens'] = array(
     '#type' => 'fieldset',
