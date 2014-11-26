@@ -56,7 +56,7 @@ function harvest_notifications_settings_form() {
   // Weekly
   $form['weekly'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Weekly notificiations'),
+    '#title' => t('Weekly notifications'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
   );
@@ -106,8 +106,11 @@ function harvest_notifications_settings_form() {
   }
   else {
     $form['weekly']['info'] = array(
-      '#value' => t('Weekly notifications is dependent on the !project module.', array(
-        '!project' => l(t('content access'), 'http://drupal.org/project/content_access', array('absolute' => TRUE))
+      '#type' => 'item',
+      '#attributes' => array('class' => array('warning')),
+      //      '#prefix' => '<div class="warning"></div>',
+      '#description' => t('Weekly notifications is dependent on the !content_access module.', 
+                          array('!content_access' => l(t('content access'), 'http://drupal.org/project/content_access', array('absolute' => TRUE))
       )),
       '#prefix' => '<div class="warning">',
       '#suffix' => '</div>',
